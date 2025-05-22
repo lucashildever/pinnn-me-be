@@ -1,0 +1,81 @@
+import { UserPlan } from 'src/common/enums/user-plan.enum';
+
+export const usersData = [
+  {
+    id: 1,
+    username: 'Carlos',
+    email: 'carlos@example.com',
+    password: '12345',
+    userPlan: UserPlan.PRO,
+  },
+  {
+    id: 2,
+    username: 'Ana',
+    email: 'ana.silva@example.com',
+    password: 'senhaAna123',
+    userPlan: UserPlan.PRO,
+  },
+  {
+    id: 3,
+    username: 'Bruno',
+    email: 'bruno.machado@example.com',
+    password: 'bruno456',
+    userPlan: UserPlan.PRO,
+  },
+  {
+    id: 4,
+    username: 'Juliana',
+    email: 'juliana.rocha@example.com',
+    password: 'ju789senha',
+    userPlan: UserPlan.PRO,
+  },
+  {
+    id: 5,
+    username: 'Felipe',
+    email: 'felipe.oliveira@example.com',
+    password: 'f3lipe321',
+    userPlan: UserPlan.PRO,
+  },
+  {
+    id: 6,
+    username: 'Mariana',
+    email: 'mariana.souza@example.com',
+    password: 'mari@2023',
+    userPlan: UserPlan.PRO,
+  },
+  {
+    id: 7,
+    username: 'Rafael',
+    email: 'rafael.lima@example.com',
+    password: 'r4fpass!',
+    userPlan: UserPlan.PRO,
+  },
+  {
+    id: 8,
+    username: 'Patrícia',
+    email: 'patricia.gomes@example.com',
+    password: 'pat2024!',
+    userPlan: UserPlan.PRO,
+  },
+  {
+    id: 9,
+    username: 'Thiago',
+    email: 'thiago.mendes@example.com',
+    password: 'th!goseed',
+    userPlan: UserPlan.PRO,
+  },
+  {
+    id: 10,
+    username: 'Camila',
+    email: 'camila.martins@example.com',
+    password: 'c4mila@123',
+    userPlan: UserPlan.PRO,
+  },
+  {
+    id: 11,
+    username: 'Eduardo',
+    email: 'eduardo.alves@example.com',
+    password: 'edpass432',
+    userPlan: UserPlan.PRO,
+  },
+];
