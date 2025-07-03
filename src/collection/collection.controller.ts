@@ -1,21 +1,66 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import {
+  Get,
+  Body,
+  Post,
+  Param,
+  Patch,
+  Delete,
+  UseGuards,
+  Controller,
+  ParseUUIDPipe,
+} from '@nestjs/common';
+import { JwtAuthGuard } from 'src/auth/guards/jwt-auth-guard';
+
+import { CollectionResponseDto } from './dto/collection-response.dto';
+import { CreateCollectionDto } from './dto/create-collection.dto';
+import { UpdateCollectionDto } from './dto/update-collection.dto';
+
 import { CollectionService } from './collection.service';
 
-@Controller('collection')
+@Controller('collections')
 export class CollectionController {
   constructor(private readonly collectionService: CollectionService) {}
 
-  // this endpoint will:
-  // - provide the first pins of a collection when the user changes selected collection, or the first pins of the
-  // default/selectes col when the page loads
-  // - this will be used also to load more pins of a collection (pagination)
-  @Get(':muralName/:collectionId')
-  getCollectionPins(
-    @Param('muralName') muralName: string,
+  @UseGuards(JwtAuthGuard)
+  @Post('create/:muralId')
+  async createCollection(
+    @Param('muralId', new ParseUUIDPipe()) muralId: string,
+    @Body() createCollectionDto: CreateCollectionDto,
+  ): Promise<CollectionResponseDto> {
+    return await this.collectionService.create(muralId, createCollectionDto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('get-all/:muralId')
+  async getMuralCollections(
+    @Param('muralId', new ParseUUIDPipe()) muralId: string,
+  ): Promise<CollectionResponseDto[]> {
+    return this.collectionService.findAll(muralId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('update/:collectionId')
+  async updateCollection(
+    @Param('collectionId', new ParseUUIDPipe()) collectionId: string,
+    @Body() updateCollectionDto: UpdateCollectionDto,
+  ): Promise<CollectionResponseDto> {
+    return this.collectionService.update(collectionId, updateCollectionDto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('delete/:collectionId')
+  async deleteCollection(
+    @Param('collectionId', new ParseUUIDPipe()) collectionId: string,
+  ): Promise<{ message: string }> {
+    return this.collectionService.softDelete(collectionId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('reorder/:collectionId/:newOrder')
+  async reorderCollections(
     @Param('collectionId') collectionId: string,
-    @Query('page') page: number = 1,
-    @Query('limit') limit: number = 10,
+    @Param('newOrder') newOrder: string,
   ) {
-    return this.collectionService.findCollectionPins();
+    return this.collectionService.reorder(collectionId, newOrder);
   }
 }
