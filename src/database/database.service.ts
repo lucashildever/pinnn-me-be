@@ -1,30 +1,40 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User } from 'src/user/entities/user.entity';
-import { Mural } from 'src/mural/entities/mural.entity';
+import { UserEntity } from 'src/user/entities/user.entity';
+import { MuralEntity } from 'src/mural/entities/mural.entity';
+import { CollectionEntity } from 'src/collection/entities/collection.entity';
+import { PinEntity } from 'src/pin/entities/pin.entity';
 import { seedUsers } from './seeds/users.seed';
 import { seedMurals } from './seeds/murals.seed';
+import { seedCollections } from './seeds/collections.seed';
+import { seedPins } from './seeds/pins.seed';
 
 @Injectable()
 export class DatabaseService {
   constructor(
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
-    @InjectRepository(Mural)
-    private readonly muralRepository: Repository<Mural>,
+    @InjectRepository(UserEntity)
+    private readonly userRepository: Repository<UserEntity>,
+    @InjectRepository(MuralEntity)
+    private readonly muralRepository: Repository<MuralEntity>,
+    @InjectRepository(CollectionEntity)
+    private readonly collectionRepository: Repository<CollectionEntity>,
+    @InjectRepository(PinEntity)
+    private readonly pinRepository: Repository<PinEntity>,
   ) {}
 
   private async clearAllTables() {
     try {
-      // Desabilita verificação de chaves estrangeiras
+      // deactivate foreign key check
       await this.userRepository.query('SET FOREIGN_KEY_CHECKS = 0');
 
-      // Limpa todas as tabelas na ordem correta
-      await this.muralRepository.query('TRUNCATE TABLE mural');
-      await this.userRepository.query('TRUNCATE TABLE user');
+      // keep this order
+      await this.pinRepository.query('TRUNCATE TABLE pins');
+      await this.collectionRepository.query('TRUNCATE TABLE collections');
+      await this.muralRepository.query('TRUNCATE TABLE murals');
+      await this.userRepository.query('TRUNCATE TABLE users');
 
-      // Reabilita verificação de chaves estrangeiras
+      // activate foreign key check
       await this.userRepository.query('SET FOREIGN_KEY_CHECKS = 1');
 
       console.log('All tables cleared successfully');
@@ -36,8 +46,12 @@ export class DatabaseService {
 
   async seed() {
     try {
-      await seedUsers(this.userRepository);
-      await seedMurals(this.muralRepository, this.userRepository);
+      // keep this order
+      // await seedUsers(this.userRepository);
+      // await seedMurals(this.muralRepository, this.userRepository);
+      // await seedCollections(this.collectionRepository, this.muralRepository);
+      // await seedPins(this.pinRepository, this.collectionRepository);
+
       console.log('Seed completed successfully');
     } catch (error) {
       console.error('Error during seed:', error);

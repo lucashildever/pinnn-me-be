@@ -1,9 +1,9 @@
 import { Repository } from 'typeorm';
-import { User } from 'src/user/entities/user.entity';
+import { UserEntity } from 'src/user/entities/user.entity';
 import { usersData } from './data/users.data';
 import * as bcrypt from 'bcrypt';
 
-export async function seedUsers(userRepository: Repository<User>) {
+export async function seedUsers(userRepository: Repository<UserEntity>) {
   try {
     for (const userData of usersData) {
       const exists = await userRepository.findOne({
