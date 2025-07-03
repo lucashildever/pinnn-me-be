@@ -1,19 +1,8 @@
-import { IsString, IsNotEmpty, MinLength, MaxLength } from 'class-validator';
+import { IsNotEmpty, IsUUID } from 'class-validator';
+import { MuralDto } from './mural.dto';
 
-export class CreateMuralDto {
-  @IsString()
+export class CreateMuralDto extends MuralDto {
+  @IsUUID()
   @IsNotEmpty()
-  @MinLength(3)
-  @MaxLength(10)
-  name: string;
-
-  @IsString()
-  @IsNotEmpty()
-  @MinLength(3)
-  @MaxLength(20)
-  displayName: string;
-
-  @IsString()
-  @MaxLength(500)
-  description: string;
+  userId: string;
 }
