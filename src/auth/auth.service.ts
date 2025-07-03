@@ -1,78 +1,66 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { User } from 'src/user/entities/user.entity';
+import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import * as bcrypt from 'bcrypt';
+
+import { CredentialService } from 'src/credential/credential.service';
+import { UserService } from 'src/user/user.service';
+
+import { AuthCredentialsDto } from './dto/auth-credentials.dto';
+import { AuthResponseDto } from './dto/auth-response.dto';
 
 @Injectable()
 export class AuthService {
   constructor(
-    @InjectRepository(User)
-    private userRepository: Repository<User>,
     private jwtService: JwtService,
+    private readonly userService: UserService,
+    private readonly credentialService: CredentialService,
   ) {}
 
-  async register(email: string, password: string) {
-    // Verificar se o email já existe
-    const existingUser = await this.userRepository.findOne({
-      where: { email },
-    });
+  async register({
+    email,
+    password,
+  }: AuthCredentialsDto): Promise<AuthResponseDto> {
+    await this.userService.validateEmailDoesNotExist(email);
 
-    if (existingUser) {
-      throw new UnauthorizedException('Email already exists');
-    }
-
-    // Criar hash da senha
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Criar novo usuário
-    const newUser = this.userRepository.create({
+    const user = await this.userService.create({
+      email: email,
       username: email.split('@')[0],
-      password: hashedPassword,
-      email,
+      password: await this.credentialService.hashPassword(password),
     });
 
-    // Salvar no banco
-    const savedUser = await this.userRepository.save(newUser);
+    const tokenPayload = { sub: user.id, email: user.email };
 
-    // Gerar JWT token
-    const payload = { email: savedUser.email, sub: savedUser.id };
     return {
-      access_token: this.jwtService.sign(payload),
-      user: savedUser,
+      access_token: this.jwtService.sign(tokenPayload),
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+      },
     };
   }
 
-  async login(email: string, password: string) {
-    // Buscar usuário pelo email
-    const user = await this.userRepository.findOne({
-      where: { email },
-      select: ['id', 'email', 'password', 'username'], // Especifica os campos que queremos retornar
-    });
+  async login({
+    email,
+    password,
+  }: AuthCredentialsDto): Promise<AuthResponseDto> {
+    const user = await this.userService.findOrFail(email, true, [
+      'id',
+      'username',
+      'email',
+      'password',
+    ]);
 
-    if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
+    await this.credentialService.validatePassword(password, user.password);
 
-    // Verificar senha
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
-    // Gerar JWT token
-    const payload = { email: user.email, sub: user.id };
-
-    const userResponse = {
-      id: user.id,
-      email: user.email,
-      username: user.username,
-    };
+    const tokenPayload = { email: user.email, sub: user.id };
 
     return {
-      access_token: this.jwtService.sign(payload),
-      user: userResponse,
+      access_token: this.jwtService.sign(tokenPayload),
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+      },
     };
   }
 }
