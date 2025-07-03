@@ -1,30 +1,51 @@
-import { UserPlan } from 'src/common/enums/user-plan.enum';
-import { Mural } from 'src/mural/entities/mural.entity';
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
+import {
+  Entity,
+  Column,
+  OneToMany,
+  UpdateDateColumn,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
+import { TimestampEntity } from 'src/common/entities/timestamp.entity';
+import { MuralEntity } from 'src/mural/entities/mural.entity';
+import { Status } from 'src/common/enums/status.enum';
 
-@Entity()
-export class User {
-  @PrimaryGeneratedColumn()
-  id: number;
+@Entity('users')
+export class UserEntity extends TimestampEntity {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
-  @Column({ unique: true, nullable: false })
+  @OneToMany(() => MuralEntity, (muralEntity) => muralEntity.user)
+  murals: MuralEntity[];
+
+  @Column({
+    type: 'varchar',
+    length: 100,
+    nullable: false,
+  })
   username: string;
 
-  @Column({ unique: true, nullable: false })
+  @Column({
+    type: 'varchar',
+    length: 255,
+    unique: true,
+    nullable: false,
+  })
   email: string;
 
-  @Column({ unique: true, nullable: false })
+  @Column({
+    type: 'varchar',
+    length: 80, // bcrypt generates 60 character length hashes
+    nullable: false,
+  })
   password: string;
 
   @Column({
-    name: 'user_plan',
     type: 'enum',
-    enum: UserPlan,
-    default: UserPlan.BASIC,
-    nullable: false,
+    enum: Status,
+    default: Status.ACTIVE,
   })
-  userPlan: UserPlan;
+  status: Status;
 
-  @OneToMany(() => Mural, (mural) => mural.user)
-  murals: Mural[];
+  @UpdateDateColumn({ type: 'timestamp' })
+  deletedAt: Date;
 }
