@@ -1,15 +1,17 @@
-import { Module } from '@nestjs/common';
-
 import configuration from 'config/configuration';
+import { Module } from '@nestjs/common';
+import { PinModule } from './pin/pin.module';
+import { UserModule } from './user/user.module';
+import { AuthModule } from './auth/auth.module';
+import { CacheModule } from './cache/cache.module';
+import { MuralModule } from './mural/mural.module';
+import { CommonModule } from './common/common.module';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-
-import { AuthModule } from './auth/auth.module';
-import { MuralModule } from './mural/mural.module';
-import { CollectionModule } from './collection/collection.module';
-import { PinGroupPageModule } from './pin-group-page/pin-group-page.module';
-import { UserModule } from './user/user.module';
 import { DatabaseModule } from './database/database.module';
+import { CollectionModule } from './collection/collection.module';
+import { CredentialModule } from './credential/credential.module';
+import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
 
 @Module({
   imports: [
@@ -26,13 +28,17 @@ import { DatabaseModule } from './database/database.module';
       database: process.env.DB_NAME,
       entities: [__dirname + '/**/*.entity{.ts,.js}'],
       synchronize: process.env.ENVIRONMENT?.toLowerCase() === 'development',
+      namingStrategy: new SnakeNamingStrategy(),
     }),
+    UserModule,
     MuralModule,
     CollectionModule,
-    PinGroupPageModule,
+    PinModule,
     AuthModule,
-    UserModule,
     DatabaseModule,
+    CredentialModule,
+    CacheModule,
+    CommonModule,
   ],
 })
 export class AppModule {}
