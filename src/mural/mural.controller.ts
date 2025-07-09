@@ -25,18 +25,14 @@ import { MuralService } from './mural.service';
 
 import { AuthRequest } from 'src/common/interfaces/auth-request.interface';
 
-@Controller('mural')
+@Controller('murals')
 export class MuralController {
   constructor(private readonly muralService: MuralService) {}
 
   @Get(':muralName')
   getMural(
     @Param('muralName') muralName: string,
-    @Query(
-      'get-main-collection-pins',
-      new DefaultValuePipe(false),
-      ParseBoolPipe,
-    )
+    @Query('getMainCollectionPins', new DefaultValuePipe(false), ParseBoolPipe)
     getMainCollectionPins: boolean,
   ): Promise<MuralResponseDto> {
     return this.muralService.find(muralName, getMainCollectionPins, false);
