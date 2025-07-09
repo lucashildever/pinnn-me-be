@@ -49,6 +49,11 @@ export class PinEntity extends TimestampEntity {
   @UpdateDateColumn({ type: 'timestamp' })
   deletedAt: Date;
 
-  @Column({ nullable: false })
+  @Column({
+    type: 'varchar',
+    length: 50,
+    nullable: false,
+    default: '0',
+  })
   order: string;
 }

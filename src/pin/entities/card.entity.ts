@@ -45,6 +45,11 @@ export class CardEntity {
   })
   link?: string;
 
-  @Column({ nullable: false })
+  @Column({
+    type: 'varchar',
+    length: 50,
+    nullable: false,
+    default: '0',
+  })
   order: string;
 }

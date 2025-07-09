@@ -38,7 +38,9 @@ export class MuralEntity extends TimestampEntity {
   @Column({ nullable: false })
   displayName: string;
 
-  @Column()
+  @Column({
+    default: 'No description for this mural yet',
+  })
   description: string;
 
   @Column({
