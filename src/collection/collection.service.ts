@@ -17,6 +17,7 @@ import { FractionalIndexingService } from 'src/common/services/fractional-indexi
 import { CacheService } from 'src/cache/cache.service';
 
 import { Status } from 'src/common/enums/status.enum';
+import { DisplayElementEntity } from 'src/common/entities/display-element.entity';
 
 @Injectable()
 export class CollectionService {
@@ -49,6 +50,7 @@ export class CollectionService {
     const queryBuilder = this.collectionRepository
       .createQueryBuilder('collection')
       .innerJoin('collection.mural', 'mural')
+      .innerJoinAndSelect('collection.displayElement', 'displayElement')
       .where('mural.id = :muralId', { muralId });
 
     if (!includeInactives) {
@@ -60,11 +62,10 @@ export class CollectionService {
     const collections = await queryBuilder
       .select([
         'collection.id',
-        'collection.type',
-        'collection.isMain',
-        'collection.icon',
-        'collection.content',
         'collection.order',
+        'collection.isMain',
+        'displayElement.content',
+        'displayElement.iconConfig',
       ])
       .orderBy('collection.isMain', 'DESC')
       .addOrderBy('collection.order', 'ASC')
@@ -72,11 +73,12 @@ export class CollectionService {
 
     const collectionsResponse = collections.map((collection) => ({
       id: collection.id,
-      type: collection.type,
-      isMain: collection.isMain,
-      icon: collection.icon,
-      content: collection.content,
       order: collection.order,
+      isMain: collection.isMain,
+      displayElement: {
+        content: collection.displayElement.content,
+        iconConfig: collection.displayElement.iconConfig,
+      },
     }));
 
     await this.cacheService.set(cacheKey, collectionsResponse, this.CACHE_TTL);
@@ -127,27 +129,31 @@ export class CollectionService {
         null,
       );
 
-      const collection = manager.create(CollectionEntity, {
-        muralId: muralId,
-        type: createCollectionDto.type,
-        icon: createCollectionDto.icon,
-        content: createCollectionDto.content,
-        isMain: createCollectionDto.isMain ?? false,
-        order: nextOrderKey,
+      const displayElement = manager.create(DisplayElementEntity, {
+        content: createCollectionDto.displayElement.content,
+        iconConfig: createCollectionDto.displayElement.iconConfig,
       });
 
+      const savedDisplayElement = await manager.save(displayElement);
+
+      const collection = manager.create(CollectionEntity, {
+        muralId: muralId,
+        isMain: createCollectionDto.isMain ?? false,
+        order: nextOrderKey,
+        displayElement: savedDisplayElement,
+      });
       const savedCollection = await manager.save(collection);
 
       const fullCollection = await manager
         .createQueryBuilder(CollectionEntity, 'collection')
+        .innerJoin('collection.displayElement', 'displayElement')
         .where('collection.id = :id', { id: savedCollection.id })
         .select([
           'collection.id',
-          'collection.type',
           'collection.isMain',
-          'collection.icon',
-          'collection.content',
           'collection.order',
+          'displayElement.content',
+          'displayElement.iconConfig',
         ])
         .getOne();
 
@@ -159,11 +165,12 @@ export class CollectionService {
 
       const responseDto: CollectionResponseDto = {
         id: fullCollection.id,
-        type: fullCollection.type,
         isMain: fullCollection.isMain,
-        icon: fullCollection.icon,
-        content: fullCollection.content,
         order: fullCollection.order,
+        displayElement: {
+          content: fullCollection.displayElement.content,
+          iconConfig: fullCollection.displayElement.iconConfig,
+        },
       };
 
       await this.cacheService.del(this.COLLECTION_LIST_CACHE_KEY(mural.name));
@@ -181,6 +188,7 @@ export class CollectionService {
       const collection = await manager
         .createQueryBuilder(CollectionEntity, 'collection')
         .innerJoin('collection.mural', 'mural')
+        .innerJoin('collection.displayElement', 'displayElement')
         .where('collection.id = :collectionId', {
           collectionId: collectionId,
         })
@@ -188,13 +196,13 @@ export class CollectionService {
         .select([
           'collection.id',
           'collection.muralId',
-          'collection.type',
           'collection.isMain',
-          'collection.icon',
-          'collection.content',
           'collection.order',
           'collection.status',
           'mural.name',
+          'displayElement.id',
+          'displayElement.content',
+          'displayElement.iconConfig',
         ])
         .getOne();
 
@@ -215,23 +223,39 @@ export class CollectionService {
         );
       }
 
-      await manager.update(
-        CollectionEntity,
-        { id: collection.id },
-        updateCollectionDto,
-      );
+      // Atualizar DisplayElement se fornecido
+      if (updateCollectionDto.displayElement) {
+        await manager.update(
+          DisplayElementEntity,
+          { id: collection.displayElement.id },
+          {
+            content: updateCollectionDto.displayElement.content,
+            iconConfig: updateCollectionDto.displayElement.iconConfig,
+          },
+        );
+      }
+
+      // Atualizar Collection (apenas campos da própria collection)
+      const { displayElement, ...collectionUpdateData } = updateCollectionDto;
+      if (Object.keys(collectionUpdateData).length > 0) {
+        await manager.update(
+          CollectionEntity,
+          { id: collection.id },
+          collectionUpdateData,
+        );
+      }
 
       const updatedCollection = await manager
         .createQueryBuilder(CollectionEntity, 'collection')
+        .innerJoin('collection.displayElement', 'displayElement')
         .where('collection.id = :id', { id: collection.id })
         .select([
           'collection.id',
-          'collection.type',
           'collection.isMain',
-          'collection.icon',
-          'collection.content',
           'collection.order',
           'collection.status',
+          'displayElement.content',
+          'displayElement.iconConfig',
         ])
         .getOne();
 
@@ -243,11 +267,12 @@ export class CollectionService {
 
       const response: CollectionResponseDto = {
         id: updatedCollection.id,
-        type: updatedCollection.type,
         isMain: updatedCollection.isMain,
-        icon: updatedCollection.icon,
-        content: updatedCollection.content,
         order: updatedCollection.order,
+        displayElement: {
+          content: updatedCollection.displayElement.content,
+          iconConfig: updatedCollection.displayElement.iconConfig,
+        },
       };
 
       await this.cacheService.del(
@@ -272,16 +297,16 @@ export class CollectionService {
 
     const mainCollection = await this.collectionRepository
       .createQueryBuilder('collection')
+      .innerJoin('collection.displayElement', 'displayElement')
       .where('collection.muralId = :muralId', { muralId })
       .andWhere('collection.isMain = :isMain', { isMain: true })
       .andWhere('collection.status = :status', { status: Status.ACTIVE })
       .select([
         'collection.id',
-        'collection.type',
         'collection.isMain',
-        'collection.icon',
-        'collection.content',
         'collection.order',
+        'displayElement.content',
+        'displayElement.iconConfig',
       ])
       .getOne();
 
@@ -293,11 +318,12 @@ export class CollectionService {
 
     const responseDto: CollectionResponseDto = {
       id: mainCollection.id,
-      type: mainCollection.type,
       isMain: mainCollection.isMain,
-      icon: mainCollection.icon,
-      content: mainCollection.content,
       order: mainCollection.order,
+      displayElement: {
+        content: mainCollection.displayElement.content,
+        iconConfig: mainCollection.displayElement.iconConfig,
+      },
     };
 
     await this.cacheService.set(cacheKey, responseDto, this.CACHE_TTL);
@@ -335,7 +361,7 @@ export class CollectionService {
       );
 
       const wasMain = collectionToDelete.isMain;
-      const collectionContent = collectionToDelete.content;
+      const collectionContent = collectionToDelete.displayElement.content;
       const muralId = collectionToDelete.muralId;
 
       if (wasMain) {

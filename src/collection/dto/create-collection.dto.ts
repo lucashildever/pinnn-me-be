@@ -1,14 +1,8 @@
-import { IsBoolean, IsOptional } from 'class-validator';
-import { CollectionTabDto } from './collection-tab.dto';
+import { CollectionDto } from './collection.dto';
 import { OmitType } from '@nestjs/mapped-types';
 
-export class CreateCollectionDto extends OmitType(CollectionTabDto, [
+export class CreateCollectionDto extends OmitType(CollectionDto, [
   'order',
-  'isMain',
   'status',
   'id',
-]) {
-  @IsOptional()
-  @IsBoolean()
-  isMain?: boolean;
-}
+]) {}

@@ -1,6 +1,6 @@
-import { CollectionTabDto } from './collection-tab.dto';
+import { CollectionDto } from './collection.dto';
 import { OmitType } from '@nestjs/mapped-types';
 
-export class CollectionResponseDto extends OmitType(CollectionTabDto, [
+export class CollectionResponseDto extends OmitType(CollectionDto, [
   'status',
 ]) {}

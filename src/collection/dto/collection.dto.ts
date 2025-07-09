@@ -7,18 +7,16 @@ import {
   MinLength,
   IsBoolean,
   IsNotEmpty,
+  ValidateNested,
 } from 'class-validator';
-import { TabType } from '../enums/tab-type.enum';
+import { DisplayElementDto } from '../../common/dto/display-element.dto';
 import { Status } from 'src/common/enums/status.enum';
+import { Type } from 'class-transformer';
 
-export class CollectionTabDto {
+export class CollectionDto {
   @IsUUID()
   @IsNotEmpty()
   id: string;
-
-  @IsEnum(TabType)
-  @IsNotEmpty()
-  type: TabType;
 
   @IsString()
   @IsNotEmpty()
@@ -30,24 +28,13 @@ export class CollectionTabDto {
   @MaxLength(10)
   order: string;
 
+  @IsEnum(Status)
+  status: Status = Status.ACTIVE;
+
   @IsBoolean()
   isMain: boolean = false;
 
-  @IsString()
-  @MaxLength(1000)
-  @Matches(
-    /^(none|https?:\/\/.*|[\p{Emoji_Presentation}\p{Extended_Pictographic}])$/u,
-    {
-      message: 'Icon must be "none", a valid URL, or a single emoji',
-    },
-  )
-  icon: string;
-
-  @IsString()
-  @MaxLength(15)
-  @IsNotEmpty()
-  content: string;
-
-  @IsEnum(Status)
-  status: Status = Status.ACTIVE;
+  @ValidateNested()
+  @Type(() => DisplayElementDto)
+  displayElement: DisplayElementDto;
 }
