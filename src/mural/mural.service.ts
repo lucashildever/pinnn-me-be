@@ -19,10 +19,8 @@ import { CacheService } from 'src/cache/cache.service';
 import { UserService } from 'src/user/user.service';
 import { PinService } from 'src/pin/pin.service';
 
-import { TabType } from '../collection/enums/tab-type.enum';
-import { Status } from 'src/common/enums/status.enum';
-
 import { MuralEntity } from './entities/mural.entity';
+import { Status } from 'src/common/enums/status.enum';
 
 @Injectable()
 export class MuralService {
@@ -61,10 +59,11 @@ export class MuralService {
       (collection) => ({
         id: collection.id,
         order: collection.order,
-        type: collection.type,
         isMain: collection.isMain,
-        icon: collection.icon,
-        content: collection.content,
+        displayElement: {
+          content: collection.displayElement.content,
+          iconConfig: collection.displayElement.iconConfig,
+        },
       }),
     );
 
@@ -115,9 +114,10 @@ export class MuralService {
 
     await this.collectionService.create(savedMural.id, {
       isMain: true,
-      content: 'Main Collection',
-      type: TabType.EMOJI,
-      icon: '🔵',
+      displayElement: {
+        content: 'Main Collection',
+        iconConfig: { type: 'emoji', unicode: '📝' },
+      },
     });
 
     const response: MuralResponseDto = {
