@@ -3,7 +3,6 @@ import {
   Matches,
   IsArray,
   IsString,
-  IsNumber,
   MinLength,
   MaxLength,
   IsOptional,
@@ -11,12 +10,11 @@ import {
   ArrayMinSize,
   ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
 import { CardDto } from './card/card.dto';
+import { Type } from 'class-transformer';
 
 export class PinDto {
   @IsUUID()
-  @IsNumber()
   @IsNotEmpty()
   id: string;
 

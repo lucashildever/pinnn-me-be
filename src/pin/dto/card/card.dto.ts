@@ -1,14 +1,15 @@
 import {
-  IsEnum,
   IsUUID,
-  IsString,
-  IsNotEmpty,
-  IsOptional,
   Matches,
-  MaxLength,
+  IsString,
   MinLength,
+  MaxLength,
+  IsNotEmpty,
+  ValidateNested,
 } from 'class-validator';
-import { CardType } from '../../enums/card-type.enum';
+import { Type } from 'class-transformer';
+import { CardConfig } from 'src/pin/types/card-config.type';
+import { CardConfigValidator } from 'src/pin/validators/card-config.validator';
 
 export class CardDto {
   @IsUUID()
@@ -26,12 +27,11 @@ export class CardDto {
   order: string;
 
   @IsString()
+  @IsNotEmpty()
   caption: string;
 
-  @IsEnum(CardType)
-  variantType: CardType;
-
-  @IsString()
-  @IsOptional()
-  link?: string;
+  @IsNotEmpty()
+  @ValidateNested()
+  @Type(() => CardConfigValidator)
+  cardConfig: CardConfig;
 }
