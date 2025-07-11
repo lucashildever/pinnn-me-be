@@ -1,12 +1,12 @@
 import {
   Column,
   Entity,
-  JoinColumn,
   ManyToOne,
+  JoinColumn,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { CardType } from '../enums/card-type.enum';
 import { PinEntity } from './pin.entity';
+import { CardConfig } from '../types/card-config.type';
 
 @Entity('cards')
 export class CardEntity {
@@ -32,18 +32,10 @@ export class CardEntity {
   caption: string;
 
   @Column({
-    type: 'enum',
-    enum: CardType,
+    type: 'json',
     nullable: false,
   })
-  variantType: CardType;
-
-  @Column({
-    type: 'text',
-    charset: 'utf8mb4',
-    nullable: true,
-  })
-  link?: string;
+  cardConfig: CardConfig;
 
   @Column({
     type: 'varchar',

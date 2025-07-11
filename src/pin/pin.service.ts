@@ -194,8 +194,7 @@ export class PinService {
             pinId: savedPin.id,
             order: cardDto.order,
             caption: cardDto.caption,
-            variantType: cardDto.variantType,
-            link: cardDto.link,
+            cardConfig: cardDto.cardConfig,
           });
 
           const savedCard = await manager.save(cardEntity);
@@ -213,8 +212,7 @@ export class PinService {
           id: card.id,
           order: card.order,
           caption: card.caption,
-          variantType: card.variantType,
-          link: card.link,
+          cardConfig: card.cardConfig,
         })),
       };
 
@@ -298,8 +296,7 @@ export class PinService {
         pinId: pinId,
         order: nextOrder,
         caption: createCardDto.caption,
-        variantType: createCardDto.variantType,
-        link: createCardDto.link,
+        cardConfig: createCardDto.cardConfig,
       });
 
       const savedCard = await manager.save(card);
@@ -310,8 +307,7 @@ export class PinService {
         id: savedCard.id,
         order: savedCard.order,
         caption: savedCard.caption,
-        variantType: savedCard.variantType,
-        link: savedCard.link,
+        cardConfig: savedCard.cardConfig,
       };
 
       return response;
@@ -361,13 +357,8 @@ export class PinService {
             cardUpdated = true;
           }
 
-          if (cardUpdate.variantType !== undefined) {
-            cardToUpdate.variantType = cardUpdate.variantType;
-            cardUpdated = true;
-          }
-
-          if (cardUpdate.link !== undefined) {
-            cardToUpdate.link = cardUpdate.link;
+          if (cardUpdate.cardConfig !== undefined) {
+            cardToUpdate.cardConfig = cardUpdate.cardConfig;
             cardUpdated = true;
           }
 
@@ -398,8 +389,7 @@ export class PinService {
           id: card.id,
           order: card.order,
           caption: card.caption,
-          variantType: card.variantType,
-          link: card.link,
+          cardConfig: card.cardConfig,
         })),
       };
     });
