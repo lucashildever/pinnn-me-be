@@ -7,7 +7,7 @@ import {
   IsNotEmpty,
 } from 'class-validator';
 import { PredefinedIcon } from 'src/common/enums/predefined-icon.enum';
-import { IsEmoji } from './is-emoji.validator';
+import { IsEmoji } from '../../collection/validators/is-emoji.validator';
 
 export class IconConfigValidator {
   @IsIn(['none', 'predefined', 'custom', 'emoji'])
