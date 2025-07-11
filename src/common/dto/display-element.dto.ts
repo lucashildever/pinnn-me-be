@@ -6,7 +6,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { IconConfig } from 'src/common/types/icon-config.type';
-import { IconConfigValidator } from 'src/collection/validators/icon-config.validator';
+import { IconConfigValidator } from 'src/common/validators/icon-config.validator';
 
 export class DisplayElementDto {
   @MaxLength(15)
