@@ -55,7 +55,7 @@ export class CollectionService {
 
     if (!includeInactives) {
       queryBuilder.andWhere('collection.status = :status', {
-        status: Status.ACTIVE,
+        status: Status.Active,
       });
     }
 
@@ -95,7 +95,7 @@ export class CollectionService {
         .createQueryBuilder(MuralEntity, 'mural')
         .select(['mural.id', 'mural.name'])
         .where('mural.id = :id', { id: muralId })
-        .andWhere('mural.status = :status', { status: Status.ACTIVE })
+        .andWhere('mural.status = :status', { status: Status.Active })
         .getOne();
 
       if (!mural) {
@@ -108,7 +108,7 @@ export class CollectionService {
           CollectionEntity,
           {
             muralId: mural.id,
-            status: Status.ACTIVE,
+            status: Status.Active,
           },
           { isMain: false },
         );
@@ -118,7 +118,7 @@ export class CollectionService {
         .createQueryBuilder(CollectionEntity, 'collection')
         .select('collection.order', 'order')
         .where('collection.muralId = :muralId', { muralId: mural.id })
-        .andWhere('collection.status = :status', { status: Status.ACTIVE })
+        .andWhere('collection.status = :status', { status: Status.Active })
         .orderBy('collection.order', 'DESC')
         .limit(1)
         .getRawOne<{ order: string }>();
@@ -192,7 +192,7 @@ export class CollectionService {
         .where('collection.id = :collectionId', {
           collectionId: collectionId,
         })
-        .andWhere('collection.status = :status', { status: Status.ACTIVE })
+        .andWhere('collection.status = :status', { status: Status.Active })
         .select([
           'collection.id',
           'collection.muralId',
@@ -217,7 +217,7 @@ export class CollectionService {
           CollectionEntity,
           {
             muralId: collection.muralId,
-            status: Status.ACTIVE,
+            status: Status.Active,
           },
           { isMain: false },
         );
@@ -300,7 +300,7 @@ export class CollectionService {
       .innerJoin('collection.displayElement', 'displayElement')
       .where('collection.muralId = :muralId', { muralId })
       .andWhere('collection.isMain = :isMain', { isMain: true })
-      .andWhere('collection.status = :status', { status: Status.ACTIVE })
+      .andWhere('collection.status = :status', { status: Status.Active })
       .select([
         'collection.id',
         'collection.isMain',
@@ -337,7 +337,7 @@ export class CollectionService {
         .createQueryBuilder(CollectionEntity, 'collection')
         .innerJoin('collection.mural', 'mural')
         .where('collection.id = :collectionId', { collectionId })
-        .andWhere('collection.status = :status', { status: Status.ACTIVE })
+        .andWhere('collection.status = :status', { status: Status.Active })
         .select([
           'collection.id',
           'collection.isMain',
@@ -357,7 +357,7 @@ export class CollectionService {
       await manager.update(
         CollectionEntity,
         { id: collectionToDelete.id },
-        { status: Status.DELETED }, // Mark as deleted
+        { status: Status.Deleted }, // Mark as deleted
       );
 
       const wasMain = collectionToDelete.isMain;
@@ -371,7 +371,7 @@ export class CollectionService {
           .where('collection.muralId = :muralId', {
             muralId: collectionToDelete.muralId,
           })
-          .andWhere('collection.status = :status', { status: Status.ACTIVE })
+          .andWhere('collection.status = :status', { status: Status.Active })
           .orderBy('collection.order', 'ASC')
           .getOne();
 
@@ -400,7 +400,7 @@ export class CollectionService {
       const collectionToReorder = await manager
         .createQueryBuilder(CollectionEntity, 'collection')
         .where('collection.id = :collectionId', { collectionId })
-        .andWhere('collection.status = :status', { status: Status.ACTIVE })
+        .andWhere('collection.status = :status', { status: Status.Active })
         .getOne();
 
       if (!collectionToReorder) {
@@ -414,7 +414,7 @@ export class CollectionService {
         .where('collection.muralId = :muralId', {
           muralId: collectionToReorder.muralId,
         })
-        .andWhere('collection.status = :status', { status: Status.ACTIVE })
+        .andWhere('collection.status = :status', { status: Status.Active })
         .andWhere('collection.id != :id', { id: collectionId })
         .andWhere('collection.order < :newOrder', { newOrder: newOrder })
         .orderBy('collection.order', 'DESC')
@@ -426,7 +426,7 @@ export class CollectionService {
         .where('collection.muralId = :muralId', {
           muralId: collectionToReorder.muralId,
         })
-        .andWhere('collection.status = :status', { status: Status.ACTIVE })
+        .andWhere('collection.status = :status', { status: Status.Active })
         .andWhere('collection.id != :collectionId', { collectionId })
         .andWhere('collection.order > :newOrder', { newOrder })
         .orderBy('collection.order', 'ASC')
@@ -438,7 +438,7 @@ export class CollectionService {
         .where('collection.muralId = :muralId', {
           muralId: collectionToReorder.muralId,
         })
-        .andWhere('collection.status = :status', { status: Status.ACTIVE })
+        .andWhere('collection.status = :status', { status: Status.Active })
         .andWhere('collection.id != :collectionId', { collectionId })
         .andWhere('collection.order = :newOrder', { newOrder })
         .getOne();

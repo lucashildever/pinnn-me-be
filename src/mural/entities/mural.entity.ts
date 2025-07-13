@@ -47,7 +47,7 @@ export class MuralEntity extends TimestampEntity {
     name: 'mural_plan',
     type: 'enum',
     enum: MuralPlan,
-    default: MuralPlan.BASIC,
+    default: MuralPlan.Basic,
     nullable: false,
   })
   muralPlan: MuralPlan;
@@ -55,7 +55,7 @@ export class MuralEntity extends TimestampEntity {
   @Column({
     type: 'enum',
     enum: Status,
-    default: Status.ACTIVE,
+    default: Status.Active,
   })
   status: Status;
 

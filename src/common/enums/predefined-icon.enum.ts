@@ -1,8 +1,8 @@
 export enum PredefinedIcon {
-  SUBSCRIBE = 'subscribe',
-  MESSAGE = 'message',
-  EMAIL = 'email',
-  ARROW = 'arrow',
-  CTA_DEFAULT = 'cta_default',
-  TAB_DEFAULT = 'tab_default',
+  Subscribe = 'subscribe',
+  Message = 'message',
+  Email = 'email',
+  Arrow = 'arrow',
+  CTA_Default = 'cta_default',
+  Tab_Default = 'tab_default',
 }

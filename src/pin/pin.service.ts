@@ -71,7 +71,7 @@ export class PinService {
     const [pins, total] = await this.pinRepository.findAndCount({
       where: {
         collectionId: collectionId,
-        status: Status.ACTIVE,
+        status: Status.Active,
       },
       relations: ['cards'],
       order: {
@@ -113,7 +113,7 @@ export class PinService {
     const pin = await this.pinRepository.findOne({
       where: {
         id: pinId,
-        status: Status.ACTIVE,
+        status: Status.Active,
       },
       relations: ['cards'],
       order: {
@@ -150,7 +150,7 @@ export class PinService {
         .where('collection.id = :collectionId', {
           collectionId: collectionId,
         })
-        .andWhere('collection.status = :status', { status: Status.ACTIVE })
+        .andWhere('collection.status = :status', { status: Status.Active })
         .getCount();
 
       if (!collection) {
@@ -165,7 +165,7 @@ export class PinService {
         .where('pin.collectionId = :collectionId', {
           collectionId: collectionId,
         })
-        .andWhere('pin.status = :status', { status: Status.ACTIVE })
+        .andWhere('pin.status = :status', { status: Status.Active })
         .getRawOne();
 
       const nextOrder = this.fractionalIndexingService.generateKeyBetween(
@@ -181,7 +181,7 @@ export class PinService {
         description: createPinDto.description,
         collectionId: collectionId,
         order: nextOrder,
-        status: Status.ACTIVE,
+        status: Status.Active,
       });
 
       const savedPin = await manager.save(pin);
@@ -243,7 +243,7 @@ export class PinService {
       const pinToDelete = await manager
         .createQueryBuilder(PinEntity, 'pin')
         .where('pin.id = :pinId', { pinId })
-        .andWhere('pin.status = :status', { status: Status.ACTIVE })
+        .andWhere('pin.status = :status', { status: Status.Active })
         .select(['pin.id', 'pin.collectionId'])
         .getOne();
 
@@ -254,7 +254,7 @@ export class PinService {
       await manager.update(
         PinEntity,
         { id: pinToDelete.id },
-        { status: Status.DELETED },
+        { status: Status.Deleted },
       );
 
       await this.invalidateCollectionPinsCache(pinToDelete.collectionId);
@@ -272,7 +272,7 @@ export class PinService {
         .createQueryBuilder(PinEntity, 'pin')
         .select(['pin.id', 'pin.collectionId'])
         .where('pin.id = :pinId', { pinId: pinId })
-        .andWhere('pin.status = :status', { status: Status.ACTIVE })
+        .andWhere('pin.status = :status', { status: Status.Active })
         .getOne();
 
       if (!pin) {
@@ -320,7 +320,7 @@ export class PinService {
         .createQueryBuilder(PinEntity, 'pin')
         .leftJoinAndSelect('pin.cards', 'cards')
         .where('pin.id = :pinId', { pinId })
-        .andWhere('pin.status = :status', { status: Status.ACTIVE })
+        .andWhere('pin.status = :status', { status: Status.Active })
         .getOne();
 
       if (!pinToUpdate) {
@@ -416,7 +416,7 @@ export class PinService {
     const pinToReorder = await manager
       .createQueryBuilder(PinEntity, 'pin')
       .where('pin.id = :pinId', { pinId })
-      .andWhere('pin.status = :status', { status: Status.ACTIVE })
+      .andWhere('pin.status = :status', { status: Status.Active })
       .getOne();
 
     if (!pinToReorder) {
@@ -428,7 +428,7 @@ export class PinService {
       .where('pin.collectionId = :collectionId', {
         collectionId: pinToReorder.collectionId,
       })
-      .andWhere('pin.status = :status', { status: Status.ACTIVE })
+      .andWhere('pin.status = :status', { status: Status.Active })
       .andWhere('pin.id != :pinId', { pinId })
       .andWhere('pin.order < :newOrder', { newOrder })
       .orderBy('pin.order', 'DESC')
@@ -440,7 +440,7 @@ export class PinService {
       .where('pin.collectionId = :collectionId', {
         collectionId: pinToReorder.collectionId,
       })
-      .andWhere('pin.status = :status', { status: Status.ACTIVE })
+      .andWhere('pin.status = :status', { status: Status.Active })
       .andWhere('pin.id != :pinId', { pinId })
       .andWhere('pin.order > :newOrder', { newOrder })
       .orderBy('pin.order', 'ASC')
@@ -452,7 +452,7 @@ export class PinService {
       .where('pin.collectionId = :collectionId', {
         collectionId: pinToReorder.collectionId,
       })
-      .andWhere('pin.status = :status', { status: Status.ACTIVE })
+      .andWhere('pin.status = :status', { status: Status.Active })
       .andWhere('pin.id != :pinId', { pinId })
       .andWhere('pin.order = :newOrder', { newOrder })
       .getOne();
@@ -496,7 +496,7 @@ export class PinService {
     const pin = await manager
       .createQueryBuilder(PinEntity, 'pin')
       .where('pin.id = :pinId', { pinId: cardToUpdate.pinId })
-      .andWhere('pin.status = :status', { status: Status.ACTIVE })
+      .andWhere('pin.status = :status', { status: Status.Active })
       .getOne();
 
     if (!pin) {

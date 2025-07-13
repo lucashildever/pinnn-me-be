@@ -1,7 +1,7 @@
 export enum Status {
-  ACTIVE = 'active',
-  PAUSED = 'paused',
-  BANNED = 'banned',
-  DELETED = 'deleted',
-  SUSPENDED = 'suspended',
+  Active = 'active',
+  Paused = 'paused',
+  Banned = 'banned',
+  Deleted = 'deleted',
+  Suspended = 'suspended',
 }

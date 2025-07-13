@@ -138,7 +138,7 @@ export class UserService {
   ): Promise<{ message: string }> {
     const user = await this.findOrFail(userId, true, ['password', 'email']);
 
-    if (user.status === Status.DELETED) {
+    if (user.status === Status.Deleted) {
       throw new BadRequestException('User is already deleted');
     }
 
@@ -149,7 +149,7 @@ export class UserService {
 
     const result = await this.userRepository.update(
       { id: userId },
-      { status: Status.DELETED },
+      { status: Status.Deleted },
     );
 
     if (result.affected === 0) {
@@ -200,7 +200,7 @@ export class UserService {
 
     const whereCondition = {
       ...(isEmail ? { email: identifier } : { id: identifier }),
-      ...(onlyActive ? { status: Status.ACTIVE } : {}),
+      ...(onlyActive ? { status: Status.Active } : {}),
     };
 
     if (selectFields) {

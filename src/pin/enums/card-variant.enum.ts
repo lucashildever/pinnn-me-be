@@ -1,4 +1,4 @@
 export enum CardVariant {
-  LINK = 'link',
-  IMAGE = 'image',
+  Link = 'link',
+  Image = 'image',
 }

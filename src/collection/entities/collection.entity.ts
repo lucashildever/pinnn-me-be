@@ -52,7 +52,7 @@ export class CollectionEntity extends TimestampEntity {
   @Column({
     type: 'enum',
     enum: Status,
-    default: Status.ACTIVE,
+    default: Status.Active,
   })
   status: Status;
 

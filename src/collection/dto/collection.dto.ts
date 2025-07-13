@@ -29,7 +29,7 @@ export class CollectionDto {
   order: string;
 
   @IsEnum(Status)
-  status: Status = Status.ACTIVE;
+  status: Status = Status.Active;
 
   @IsBoolean()
   isMain: boolean = false;

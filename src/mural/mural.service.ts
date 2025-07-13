@@ -201,7 +201,7 @@ export class MuralService {
 
     await this.muralRepository.update(
       { id: muralId },
-      { status: Status.DELETED },
+      { status: Status.Deleted },
     );
 
     await this.cacheService.del(this.MURAL_CACHE_KEY(mural.name, true));
@@ -253,7 +253,7 @@ export class MuralService {
 
     const whereCondition = {
       ...(isUUID ? { id: identifier } : { name: identifier }),
-      ...(onlyActive ? { status: Status.ACTIVE } : {}),
+      ...(onlyActive ? { status: Status.Active } : {}),
     };
 
     let mural: MuralEntity | null;
