@@ -1,10 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { UserEntity } from 'src/user/entities/user.entity';
-import { MuralEntity } from 'src/mural/entities/mural.entity';
-import { CollectionEntity } from 'src/collection/entities/collection.entity';
-import { PinEntity } from 'src/pin/entities/pin.entity';
+import { UserEntity } from 'src/users/entities/user.entity';
+import { MuralEntity } from 'src/murals/entities/mural.entity';
+import { CollectionEntity } from 'src/collections/entities/collection.entity';
+import { PinEntity } from 'src/pins/entities/pin.entity';
 import { seedUsers } from './seeds/users.seed';
 import { seedMurals } from './seeds/murals.seed';
 import { seedCollections } from './seeds/collections.seed';

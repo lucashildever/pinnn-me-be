@@ -1,6 +1,6 @@
 import { Repository } from 'typeorm';
-import { PinEntity } from 'src/pin/entities/pin.entity';
-import { CollectionEntity } from 'src/collection/entities/collection.entity';
+import { PinEntity } from 'src/pins/entities/pin.entity';
+import { CollectionEntity } from 'src/collections/entities/collection.entity';
 import { pinsData } from './data/pins.data';
 
 export async function seedPins(

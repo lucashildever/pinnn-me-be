@@ -1,5 +1,5 @@
 import { Repository } from 'typeorm';
-import { UserEntity } from 'src/user/entities/user.entity';
+import { UserEntity } from 'src/users/entities/user.entity';
 import { usersData } from './data/users.data';
 import * as bcrypt from 'bcrypt';
 

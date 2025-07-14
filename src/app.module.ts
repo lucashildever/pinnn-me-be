@@ -1,17 +1,18 @@
 import configuration from 'config/configuration';
 import { Module } from '@nestjs/common';
-import { PinModule } from './pin/pin.module';
-import { UserModule } from './user/user.module';
+import { PinsModule } from './pins/pins.module';
+import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { CacheModule } from './cache/cache.module';
-import { MuralModule } from './mural/mural.module';
+import { MuralsModule } from './murals/murals.module';
 import { CommonModule } from './common/common.module';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DatabaseModule } from './database/database.module';
-import { CollectionModule } from './collection/collection.module';
-import { CredentialModule } from './credential/credential.module';
+import { CollectionsModule } from './collections/collections.module';
+import { CredentialsModule } from './credentials/credentials.module';
 import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
+import { PaymentModule } from './payment/payment.module';
 
 @Module({
   imports: [
@@ -30,15 +31,16 @@ import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
       synchronize: process.env.ENVIRONMENT?.toLowerCase() === 'development',
       namingStrategy: new SnakeNamingStrategy(),
     }),
-    UserModule,
-    MuralModule,
-    CollectionModule,
-    PinModule,
+    UsersModule,
+    MuralsModule,
+    CollectionsModule,
+    PinsModule,
     AuthModule,
     DatabaseModule,
-    CredentialModule,
+    CredentialsModule,
     CacheModule,
     CommonModule,
+    PaymentModule,
   ],
 })
 export class AppModule {}

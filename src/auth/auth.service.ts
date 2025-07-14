@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 
-import { CredentialService } from 'src/credential/credential.service';
-import { UserService } from 'src/user/user.service';
+import { CredentialsService } from 'src/credentials/credentials.service';
+import { UsersService } from 'src/users/users.service';
 
 import { AuthCredentialsDto } from './dto/auth-credentials.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
@@ -11,8 +11,8 @@ import { AuthResponseDto } from './dto/auth-response.dto';
 export class AuthService {
   constructor(
     private jwtService: JwtService,
-    private readonly userService: UserService,
-    private readonly credentialService: CredentialService,
+    private readonly userService: UsersService,
+    private readonly credentialService: CredentialsService,
   ) {}
 
   async register({

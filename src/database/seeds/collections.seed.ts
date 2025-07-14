@@ -1,6 +1,6 @@
 import { Repository } from 'typeorm';
-import { CollectionEntity } from 'src/collection/entities/collection.entity';
-import { MuralEntity } from 'src/mural/entities/mural.entity';
+import { CollectionEntity } from 'src/collections/entities/collection.entity';
+import { MuralEntity } from 'src/murals/entities/mural.entity';
 import { collectionsData } from './data/collections.data';
 
 export async function seedCollections(

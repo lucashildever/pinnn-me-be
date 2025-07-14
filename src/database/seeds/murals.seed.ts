@@ -1,6 +1,6 @@
 import { Repository } from 'typeorm';
-import { MuralEntity } from 'src/mural/entities/mural.entity';
-import { UserEntity } from 'src/user/entities/user.entity';
+import { MuralEntity } from 'src/murals/entities/mural.entity';
+import { UserEntity } from 'src/users/entities/user.entity';
 import { muralsData } from './data/murals.data';
 
 export async function seedMurals(

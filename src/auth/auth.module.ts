@@ -5,12 +5,12 @@ import { Module } from '@nestjs/common';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtModule } from '@nestjs/jwt';
 
-import { CredentialModule } from 'src/credential/credential.module';
-import { UserModule } from 'src/user/user.module';
+import { CredentialsModule } from 'src/credentials/credentials.module';
+import { UsersModule } from 'src/users/users.module';
 
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
-import { UserEntity } from 'src/user/entities/user.entity';
+import { UserEntity } from 'src/users/entities/user.entity';
 
 @Module({
   imports: [
@@ -24,8 +24,8 @@ import { UserEntity } from 'src/user/entities/user.entity';
       }),
       inject: [ConfigService],
     }),
-    UserModule,
-    CredentialModule,
+    UsersModule,
+    CredentialsModule,
   ],
   providers: [AuthService, JwtStrategy],
   exports: [AuthService],
