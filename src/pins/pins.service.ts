@@ -3,15 +3,15 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { Repository, DataSource, EntityManager } from 'typeorm';
+import { Repository, DataSource, EntityManager, In } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 
 import { CollectionEntity } from 'src/collections/entities/collection.entity';
 import { CardEntity } from './entities/card.entity';
 import { PinEntity } from './entities/pin.entity';
 
-import { PaginatedPinsResponseDto } from './dto/paginated/paginated-pins-response.dto';
-import { PaginationQueryDto } from './dto/paginated/pagination-query.dto';
+import { PaginatedPinsResponseDto } from './dto/pagination/paginated-pins-response.dto';
+import { PaginationQueryDto } from './dto/pagination/pagination-query.dto';
 import { CreateCardDto } from './dto/card/create-card.dto';
 import { CreatePinDto } from './dto/create-pin.dto';
 import { UpdatePinDto } from './dto/update-pin.dto';
@@ -61,31 +61,40 @@ export class PinsService {
 
     const cachedPins =
       await this.cacheService.get<PaginatedPinsResponseDto>(cacheKey);
-
     if (cachedPins) {
       return cachedPins;
     }
 
     const skip = (page - 1) * limit;
 
-    const [pins, total] = await this.pinRepository.findAndCount({
+    const total = await this.pinRepository.count({
       where: {
         collectionId: collectionId,
         status: Status.Active,
       },
-      relations: ['cards'],
-      order: {
-        order: 'ASC',
-        cards: {
-          order: 'ASC',
-        },
-      },
-      skip,
-      take: limit,
     });
 
+    const pins = await this.pinRepository
+      .createQueryBuilder('pin')
+      .leftJoinAndSelect('pin.cards', 'card')
+      .where('pin.collectionId = :collectionId', { collectionId })
+      .andWhere('pin.status = :status', { status: Status.Active })
+      .orderBy('pin.order', 'ASC')
+      .skip(skip)
+      .take(limit)
+      .getMany();
+
+    const pinsWithOrderedCards = pins.map((pin) => ({
+      ...pin,
+      cards: pin.cards.sort((a, b) => {
+        if (a.order < b.order) return -1;
+        if (a.order > b.order) return 1;
+        return 0;
+      }),
+    }));
+
     const response: PaginatedPinsResponseDto = {
-      data: pins.map((pin) => ({
+      data: pinsWithOrderedCards.map((pin) => ({
         id: pin.id,
         description: pin.description,
         collection_id: pin.collectionId,
@@ -97,11 +106,8 @@ export class PinsService {
       })),
       pagination: {
         currentPage: page,
-        totalPages: Math.ceil(total / limit) || 1,
         totalItems: total,
         itemsPerPage: limit,
-        hasNextPage: page < Math.ceil(total / limit),
-        hasPreviousPage: page > 1,
       },
     };
 
