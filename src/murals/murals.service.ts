@@ -88,11 +88,8 @@ export class MuralsService {
             data: [],
             pagination: {
               currentPage: 1,
-              totalPages: 1,
               totalItems: 0,
               itemsPerPage: 5,
-              hasNextPage: false,
-              hasPreviousPage: false,
             },
           };
         } else {

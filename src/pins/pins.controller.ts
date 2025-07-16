@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth-guard';
 
-import { PaginationQueryDto } from './dto/paginated/pagination-query.dto';
+import { PaginationQueryDto } from './dto/pagination/pagination-query.dto';
 import { CreatePinDto } from './dto/create-pin.dto';
 import { UpdatePinDto } from './dto/update-pin.dto';
 import { ReorderDto } from './dto/reorder.dto';

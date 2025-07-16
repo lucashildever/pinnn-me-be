@@ -6,7 +6,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { PaginatedPinsResponseDto } from 'src/pins/dto/paginated/paginated-pins-response.dto';
+import { PaginatedPinsResponseDto } from 'src/pins/dto/pagination/paginated-pins-response.dto';
 import { MuralDto } from './mural.dto';
 import { CollectionResponseDto } from 'src/collections/dto/collection-response.dto';
 
