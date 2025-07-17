@@ -11,6 +11,8 @@ import { UsersModule } from 'src/users/users.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { UserEntity } from 'src/users/entities/user.entity';
+import { RolesGuard } from './guards/roles.guard';
+import { SuperAdminGuard } from './guards/super-admin.guard';
 
 @Module({
   imports: [
@@ -27,8 +29,8 @@ import { UserEntity } from 'src/users/entities/user.entity';
     UsersModule,
     CredentialsModule,
   ],
-  providers: [AuthService, JwtStrategy],
-  exports: [AuthService],
+  providers: [AuthService, JwtStrategy, RolesGuard, SuperAdminGuard],
+  exports: [AuthService, RolesGuard, SuperAdminGuard],
   controllers: [AuthController],
 })
 export class AuthModule {}
