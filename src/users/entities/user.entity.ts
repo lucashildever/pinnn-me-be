@@ -8,6 +8,7 @@ import {
 import { TimestampEntity } from 'src/common/entities/timestamp.entity';
 import { MuralEntity } from 'src/murals/entities/mural.entity';
 import { Status } from 'src/common/enums/status.enum';
+import { Role } from '../enums/role.enum';
 
 @Entity('users')
 export class UserEntity extends TimestampEntity {
@@ -34,10 +35,17 @@ export class UserEntity extends TimestampEntity {
 
   @Column({
     type: 'varchar',
-    length: 80, // bcrypt generates 60 character length hashes
+    length: 80,
     nullable: false,
   })
   password: string;
+
+  @Column({
+    type: 'enum',
+    enum: Role,
+    default: Role.USER,
+  })
+  role: Role;
 
   @Column({
     type: 'enum',
