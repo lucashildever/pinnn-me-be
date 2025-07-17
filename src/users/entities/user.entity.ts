@@ -8,7 +8,7 @@ import {
 import { TimestampEntity } from 'src/common/entities/timestamp.entity';
 import { MuralEntity } from 'src/murals/entities/mural.entity';
 import { Status } from 'src/common/enums/status.enum';
-import { Role } from '../enums/role.enum';
+import { Role } from '../../auth/enums/role.enum';
 
 @Entity('users')
 export class UserEntity extends TimestampEntity {
