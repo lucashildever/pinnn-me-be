@@ -26,6 +26,6 @@ export class Price extends TimestampEntity {
   @Column({ default: 'monthly' })
   billingPeriod: string;
 
-  @Column({ length: 3 }) // ISO 4217 currency codes (USD, BRL, EUR, etc.)
+  @Column({ length: 3, default: 'USD' })
   currency: string;
 }

@@ -13,6 +13,8 @@ import { CollectionsModule } from './collections/collections.module';
 import { CredentialsModule } from './credentials/credentials.module';
 import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
 import { PaymentModule } from './payment/payment.module';
+import { SubscriptionModule } from './subscription/subscription.module';
+import { PlansModule } from './plans/plans.module';
 
 @Module({
   imports: [
@@ -41,6 +43,8 @@ import { PaymentModule } from './payment/payment.module';
     CacheModule,
     CommonModule,
     PaymentModule,
+    SubscriptionModule,
+    PlansModule,
   ],
 })
 export class AppModule {}
