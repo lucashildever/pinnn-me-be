@@ -1,25 +1,30 @@
-import configuration from 'config/configuration';
 import { Module } from '@nestjs/common';
+import configuration from 'config/configuration';
+
+import { ConfigModule } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
+
 import { PinsModule } from './pins/pins.module';
-import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
+import { PlansModule } from './plans/plans.module';
 import { CacheModule } from './cache/cache.module';
 import { MuralsModule } from './murals/murals.module';
 import { CommonModule } from './common/common.module';
-import { ConfigModule } from '@nestjs/config';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { PaymentsModule } from './payments/payments.module';
 import { DatabaseModule } from './database/database.module';
 import { CollectionsModule } from './collections/collections.module';
 import { CredentialsModule } from './credentials/credentials.module';
-import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
-import { PaymentModule } from './payment/payment.module';
 import { SubscriptionModule } from './subscription/subscription.module';
-import { PlansModule } from './plans/plans.module';
+
+import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
+import { WebhooksModule } from './webhooks/webhooks.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       load: [configuration],
+      envFilePath: `.env.${process.env.NODE_ENV || 'development'}`,
       isGlobal: true,
     }),
     TypeOrmModule.forRoot({
@@ -42,9 +47,10 @@ import { PlansModule } from './plans/plans.module';
     CredentialsModule,
     CacheModule,
     CommonModule,
-    PaymentModule,
+    PaymentsModule,
     SubscriptionModule,
     PlansModule,
+    WebhooksModule,
   ],
 })
 export class AppModule {}
