@@ -3,7 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { Repository, DataSource, EntityManager, In } from 'typeorm';
+import { Repository, DataSource, EntityManager } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 
 import { CollectionEntity } from 'src/collections/entities/collection.entity';
@@ -28,10 +28,13 @@ import { Status } from 'src/common/enums/status.enum';
 export class PinsService {
   constructor(
     @InjectRepository(PinEntity)
-    private readonly pinRepository: Repository<PinEntity>,
+    private readonly pinsRepository: Repository<PinEntity>,
+    @InjectRepository(CollectionEntity)
+    private readonly collectionsRepository: Repository<CollectionEntity>,
+
+    private readonly fractionalIndexingService: FractionalIndexingService,
     private readonly cacheService: CacheService,
     private readonly dataSource: DataSource,
-    private readonly fractionalIndexingService: FractionalIndexingService,
   ) {}
 
   private readonly CACHE_TTL = 300;
@@ -55,6 +58,16 @@ export class PinsService {
     collectionId: string,
     paginationQueryDto: PaginationQueryDto,
   ): Promise<PaginatedPinsResponseDto> {
+    const collectionExists = await this.collectionsRepository.exists({
+      where: { id: collectionId, status: Status.Active },
+    });
+
+    if (!collectionExists) {
+      throw new NotFoundException(
+        `Collection with ID ${collectionId} not found`,
+      );
+    }
+
     const { page = 1, limit = 5 } = paginationQueryDto;
 
     const cacheKey = this.PINS_CACHE_KEY(collectionId, page, limit);
@@ -67,14 +80,14 @@ export class PinsService {
 
     const skip = (page - 1) * limit;
 
-    const total = await this.pinRepository.count({
+    const total = await this.pinsRepository.count({
       where: {
         collectionId: collectionId,
         status: Status.Active,
       },
     });
 
-    const pins = await this.pinRepository
+    const pins = await this.pinsRepository
       .createQueryBuilder('pin')
       .leftJoinAndSelect('pin.cards', 'card')
       .where('pin.collectionId = :collectionId', { collectionId })
@@ -116,7 +129,7 @@ export class PinsService {
   }
 
   async findOne(pinId: string): Promise<PinDto> {
-    const pin = await this.pinRepository.findOne({
+    const pin = await this.pinsRepository.findOne({
       where: {
         id: pinId,
         status: Status.Active,
