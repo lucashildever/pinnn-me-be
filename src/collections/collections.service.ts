@@ -10,23 +10,24 @@ import { CollectionResponseDto } from './dto/collection-response.dto';
 import { CreateCollectionDto } from './dto/create-collection.dto';
 import { UpdateCollectionDto } from './dto/update-collection.dto';
 
-import { MuralEntity } from 'src/murals/entities/mural.entity';
+import { DisplayElementEntity } from 'src/common/entities/display-element.entity';
 import { CollectionEntity } from './entities/collection.entity';
+import { MuralEntity } from 'src/murals/entities/mural.entity';
 
 import { FractionalIndexingService } from 'src/common/services/fractional-indexing.service';
 import { CacheService } from 'src/cache/cache.service';
 
 import { Status } from 'src/common/enums/status.enum';
-import { DisplayElementEntity } from 'src/common/entities/display-element.entity';
 
 @Injectable()
 export class CollectionsService {
   constructor(
     @InjectRepository(CollectionEntity)
-    private readonly collectionRepository: Repository<CollectionEntity>,
+    private readonly collectionsRepository: Repository<CollectionEntity>,
+
+    private readonly fractionalIndexingService: FractionalIndexingService,
     private readonly cacheService: CacheService,
     private readonly dataSource: DataSource,
-    private readonly fractionalIndexingService: FractionalIndexingService,
   ) {}
 
   private readonly COLLECTION_LIST_CACHE_KEY = (muralId: string) =>
@@ -47,7 +48,7 @@ export class CollectionsService {
       return cachedCollections;
     }
 
-    const queryBuilder = this.collectionRepository
+    const queryBuilder = this.collectionsRepository
       .createQueryBuilder('collection')
       .innerJoin('collection.mural', 'mural')
       .innerJoinAndSelect('collection.displayElement', 'displayElement')
@@ -295,7 +296,7 @@ export class CollectionsService {
       return cachedCollection;
     }
 
-    const mainCollection = await this.collectionRepository
+    const mainCollection = await this.collectionsRepository
       .createQueryBuilder('collection')
       .innerJoin('collection.displayElement', 'displayElement')
       .where('collection.muralId = :muralId', { muralId })

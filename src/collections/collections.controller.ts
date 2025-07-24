@@ -19,7 +19,7 @@ import { CollectionsService } from './collections.service';
 
 @Controller('collections')
 export class CollectionsController {
-  constructor(private readonly collectionService: CollectionsService) {}
+  constructor(private readonly collectionsService: CollectionsService) {}
 
   @UseGuards(JwtAuthGuard)
   @Post('create/:muralId')
@@ -27,7 +27,7 @@ export class CollectionsController {
     @Param('muralId', new ParseUUIDPipe()) muralId: string,
     @Body() createCollectionDto: CreateCollectionDto,
   ): Promise<CollectionResponseDto> {
-    return await this.collectionService.create(muralId, createCollectionDto);
+    return await this.collectionsService.create(muralId, createCollectionDto);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -35,7 +35,7 @@ export class CollectionsController {
   async getMuralCollections(
     @Param('muralId', new ParseUUIDPipe()) muralId: string,
   ): Promise<CollectionResponseDto[]> {
-    return this.collectionService.findAll(muralId);
+    return this.collectionsService.findAll(muralId);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -44,7 +44,7 @@ export class CollectionsController {
     @Param('collectionId', new ParseUUIDPipe()) collectionId: string,
     @Body() updateCollectionDto: UpdateCollectionDto,
   ): Promise<CollectionResponseDto> {
-    return this.collectionService.update(collectionId, updateCollectionDto);
+    return this.collectionsService.update(collectionId, updateCollectionDto);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -52,7 +52,7 @@ export class CollectionsController {
   async deleteCollection(
     @Param('collectionId', new ParseUUIDPipe()) collectionId: string,
   ): Promise<{ message: string }> {
-    return this.collectionService.softDelete(collectionId);
+    return this.collectionsService.softDelete(collectionId);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -61,6 +61,6 @@ export class CollectionsController {
     @Param('collectionId') collectionId: string,
     @Param('newOrder') newOrder: string,
   ) {
-    return this.collectionService.reorder(collectionId, newOrder);
+    return this.collectionsService.reorder(collectionId, newOrder);
   }
 }

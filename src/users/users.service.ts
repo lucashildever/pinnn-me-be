@@ -17,16 +17,20 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { DeleteUserDto } from './dto/delete-user.dto';
 
 import { EmailAlreadyExistsException } from '../auth/exceptions/email-already-exists.exception';
+
 import { UserEntity } from './entities/user.entity';
+
 import { Status } from 'src/common/enums/status.enum';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectRepository(UserEntity)
-    private readonly userRepository: Repository<UserEntity>,
-    private readonly credentialService: CredentialsService,
+    private readonly usersRepository: Repository<UserEntity>,
+
+    private readonly credentialsService: CredentialsService,
     private readonly cacheService: CacheService,
+
     private readonly dataSource: DataSource,
   ) {}
 
@@ -72,7 +76,7 @@ export class UsersService {
   async create(createUserDto: CreateUserDto): Promise<CreateUserResponseDto> {
     const response: CreateUserResponseDto = await this.dataSource.transaction(
       async (manager) => {
-        const existingUser = await this.userRepository.findOne({
+        const existingUser = await this.usersRepository.findOne({
           where: { email: createUserDto.email },
         });
 
@@ -82,7 +86,7 @@ export class UsersService {
 
         await this.validateEmailDoesNotExist(createUserDto.email);
 
-        const hashedPassword = await this.credentialService.hashPassword(
+        const hashedPassword = await this.credentialsService.hashPassword(
           createUserDto.password,
         );
 
@@ -118,7 +122,7 @@ export class UsersService {
 
     Object.assign(user, updateUserDto);
 
-    const savedUser = await this.userRepository.save(user);
+    const savedUser = await this.usersRepository.save(user);
 
     const response = {
       id: savedUser.id,
@@ -141,12 +145,12 @@ export class UsersService {
       throw new BadRequestException('User is already deleted');
     }
 
-    await this.credentialService.validatePassword(
+    await this.credentialsService.validatePassword(
       deleteUserDto.password,
       user.password,
     );
 
-    const result = await this.userRepository.update(
+    const result = await this.usersRepository.update(
       { id: userId },
       { status: Status.Deleted },
     );
@@ -177,7 +181,7 @@ export class UsersService {
       return cached;
     }
 
-    const user = await this.userRepository.findOne({
+    const user = await this.usersRepository.findOne({
       where: { email },
     });
 
@@ -203,12 +207,12 @@ export class UsersService {
     };
 
     if (selectFields) {
-      user = await this.userRepository.findOne({
+      user = await this.usersRepository.findOne({
         where: whereCondition,
         select: selectFields as (keyof UserEntity)[],
       });
     } else {
-      user = await this.userRepository.findOneBy(whereCondition);
+      user = await this.usersRepository.findOneBy(whereCondition);
     }
 
     if (!user) {

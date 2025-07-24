@@ -22,12 +22,12 @@ import { AuthRequest } from 'src/common/interfaces/auth-request.interface';
 
 @Controller('users')
 export class UsersController {
-  constructor(private readonly userService: UsersService) {}
+  constructor(private readonly usersService: UsersService) {}
 
   @UseGuards(JwtAuthGuard)
   @Get()
   async getUser(@Req() request: AuthRequest): Promise<UserResponseDto> {
-    return this.userService.find(request.user.id);
+    return this.usersService.find(request.user.id);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -36,7 +36,7 @@ export class UsersController {
     @Req() request: AuthRequest,
     @Body() updateUserDto: UpdateUserDto,
   ): Promise<UserResponseDto> {
-    return this.userService.update(request.user.id, updateUserDto);
+    return this.usersService.update(request.user.id, updateUserDto);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -45,14 +45,14 @@ export class UsersController {
     @Req() request: AuthRequest,
     @Body() deleteUserDto: DeleteUserDto,
   ): Promise<{ message: string }> {
-    return this.userService.softDelete(request.user.id, deleteUserDto);
+    return this.usersService.softDelete(request.user.id, deleteUserDto);
   }
 
   @Post('validate-email')
   async validateEmail(
     @Body() validateEmailDto: ValidateEmailDto,
   ): Promise<{ available: boolean }> {
-    const exists = await this.userService.checkIfEmailExists(
+    const exists = await this.usersService.checkIfEmailExists(
       validateEmailDto.email,
     );
     return { available: !exists };

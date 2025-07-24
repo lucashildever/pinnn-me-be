@@ -4,30 +4,30 @@ import { MuralEntity } from 'src/murals/entities/mural.entity';
 import { collectionsData } from './data/collections.data';
 
 export async function seedCollections(
-  collectionRepository: Repository<CollectionEntity>,
-  muralRepository: Repository<MuralEntity>,
+  collectionsRepository: Repository<CollectionEntity>,
+  muralsRepository: Repository<MuralEntity>,
 ) {
   // try {
   //   for (const collectionData of collectionsData) {
-  //     const mural = await muralRepository.findOne({
+  //     const mural = await muralsRepository.findOne({
   //       where: { id: collectionData.muralId },
   //     });
   //     if (!mural) {
   //       console.log(`Mural with ID ${collectionData.muralId} not found`);
   //       continue;
   //     }
-  //     const exists = await collectionRepository.findOne({
+  //     const exists = await collectionsRepository.findOne({
   //       where: {
   //         content: collectionData.content,
   //         mural_id: collectionData.mural_id,
   //       },
   //     });
   //     if (!exists) {
-  //       const collection = collectionRepository.create({
+  //       const collection = collectionsRepository.create({
   //         ...collectionData,
   //         mural: mural,
   //       });
-  //       await collectionRepository.save(collection);
+  //       await collectionsRepository.save(collection);
   //       console.log(
   //         `Collection "${collectionData.content}" created successfully`,
   //       );

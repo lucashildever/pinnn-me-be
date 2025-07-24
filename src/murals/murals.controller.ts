@@ -27,7 +27,7 @@ import { AuthRequest } from 'src/common/interfaces/auth-request.interface';
 
 @Controller('murals')
 export class MuralsController {
-  constructor(private readonly muralService: MuralsService) {}
+  constructor(private readonly muralsService: MuralsService) {}
 
   @Get(':muralName')
   getMural(
@@ -35,7 +35,7 @@ export class MuralsController {
     @Query('getMainCollectionPins', new DefaultValuePipe(false), ParseBoolPipe)
     getMainCollectionPins: boolean,
   ): Promise<MuralResponseDto> {
-    return this.muralService.find(muralName, getMainCollectionPins, false);
+    return this.muralsService.find(muralName, getMainCollectionPins, false);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -44,7 +44,7 @@ export class MuralsController {
     @Req() request: AuthRequest,
     @Body() muralDto: MuralDto,
   ): Promise<MuralResponseDto> {
-    return this.muralService.create(request.user.id, muralDto);
+    return this.muralsService.create(request.user.id, muralDto);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -53,7 +53,7 @@ export class MuralsController {
     @Param('muralId', new ParseUUIDPipe()) muralId: string,
     @Body() DeleteMuralDto: DeleteMuralDto,
   ): Promise<{ message: string }> {
-    return this.muralService.softDelete(muralId, DeleteMuralDto);
+    return this.muralsService.softDelete(muralId, DeleteMuralDto);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -62,6 +62,6 @@ export class MuralsController {
     @Param('muralId', new ParseUUIDPipe()) muralId: string,
     @Body() updateMuralDto: UpdateMuralDto,
   ): Promise<UpdateMuralResponseDto> {
-    return await this.muralService.update(muralId, updateMuralDto);
+    return await this.muralsService.update(muralId, updateMuralDto);
   }
 }

@@ -26,12 +26,13 @@ import { Status } from 'src/common/enums/status.enum';
 export class MuralsService {
   constructor(
     @InjectRepository(MuralEntity)
-    private readonly muralRepository: Repository<MuralEntity>,
-    private readonly collectionService: CollectionsService,
-    private readonly credentialService: CredentialsService,
+    private readonly muralsRepository: Repository<MuralEntity>,
+
+    private readonly collectionsService: CollectionsService,
+    private readonly credentialsService: CredentialsService,
     private readonly cacheService: CacheService,
-    private readonly userService: UsersService,
-    private readonly pinService: PinsService,
+    private readonly usersService: UsersService,
+    private readonly pinsService: PinsService,
   ) {}
 
   private readonly MURAL_CACHE_KEY = (muralName: string, withPins: boolean) =>
@@ -55,7 +56,7 @@ export class MuralsService {
 
     const mural = await this.findOrFail(muralName, !includeInactives);
 
-    const collections = (await this.collectionService.findAll(mural.id)).map(
+    const collections = (await this.collectionsService.findAll(mural.id)).map(
       (collection) => ({
         id: collection.id,
         order: collection.order,
@@ -77,8 +78,8 @@ export class MuralsService {
 
     if (getMainCollectionPins) {
       try {
-        const mainCollection = await this.collectionService.findMain(mural.id);
-        response.mainCollectionPins = await this.pinService.findPaginated(
+        const mainCollection = await this.collectionsService.findMain(mural.id);
+        response.mainCollectionPins = await this.pinsService.findPaginated(
           mainCollection.id,
           { page: 1, limit: 5 },
         );
@@ -105,11 +106,11 @@ export class MuralsService {
   async create(userId: string, muralDto: MuralDto): Promise<MuralResponseDto> {
     await this.checkMuralNameAvailability(muralDto.name);
 
-    const mural = this.muralRepository.create({ userId, ...muralDto });
+    const mural = this.muralsRepository.create({ userId, ...muralDto });
 
-    const savedMural = await this.muralRepository.save(mural);
+    const savedMural = await this.muralsRepository.save(mural);
 
-    await this.collectionService.create(savedMural.id, {
+    await this.collectionsService.create(savedMural.id, {
       isMain: true,
       displayElement: {
         content: 'Main Collection',
@@ -139,9 +140,9 @@ export class MuralsService {
       await this.checkMuralNameAvailability(updateMuralDto.name);
     }
 
-    await this.muralRepository.update({ id: muralId }, updateMuralDto);
+    await this.muralsRepository.update({ id: muralId }, updateMuralDto);
 
-    const updatedMural = await this.muralRepository.findOneBy({
+    const updatedMural = await this.muralsRepository.findOneBy({
       id: muralId,
     });
 
@@ -187,16 +188,16 @@ export class MuralsService {
   ): Promise<{ message: string }> {
     const mural = await this.findOrFail(muralId, true, ['userId', 'name']);
 
-    const user = await this.userService.findOrFail(mural.userId, true, [
+    const user = await this.usersService.findOrFail(mural.userId, true, [
       'password',
     ]);
 
-    await this.credentialService.validatePassword(
+    await this.credentialsService.validatePassword(
       deleteMuralDto.password,
       user.password,
     );
 
-    await this.muralRepository.update(
+    await this.muralsRepository.update(
       { id: muralId },
       { status: Status.Deleted },
     );
@@ -223,7 +224,7 @@ export class MuralsService {
       return;
     }
 
-    const existingMural = await this.muralRepository.findOneBy({
+    const existingMural = await this.muralsRepository.findOneBy({
       name: muralName,
     });
 
@@ -256,12 +257,12 @@ export class MuralsService {
     let mural: MuralEntity | null;
 
     if (selectFields) {
-      mural = await this.muralRepository.findOne({
+      mural = await this.muralsRepository.findOne({
         where: whereCondition,
         select: selectFields as (keyof MuralEntity)[],
       });
     } else {
-      mural = await this.muralRepository.findOneBy(whereCondition);
+      mural = await this.muralsRepository.findOneBy(whereCondition);
     }
 
     if (!mural) {

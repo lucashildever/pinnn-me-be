@@ -11,20 +11,20 @@ import { AuthResponseDto } from './dto/auth-response.dto';
 export class AuthService {
   constructor(
     private jwtService: JwtService,
-    private readonly userService: UsersService,
-    private readonly credentialService: CredentialsService,
+    private readonly usersService: UsersService,
+    private readonly credentialsService: CredentialsService,
   ) {}
 
   async register({
     email,
     password,
   }: AuthCredentialsDto): Promise<AuthResponseDto> {
-    await this.userService.validateEmailDoesNotExist(email);
+    await this.usersService.validateEmailDoesNotExist(email);
 
-    const user = await this.userService.create({
+    const user = await this.usersService.create({
       email: email,
       username: email.split('@')[0],
-      password: await this.credentialService.hashPassword(password),
+      password: await this.credentialsService.hashPassword(password),
     });
 
     const tokenPayload = { sub: user.id, email: user.email };
@@ -43,14 +43,14 @@ export class AuthService {
     email,
     password,
   }: AuthCredentialsDto): Promise<AuthResponseDto> {
-    const user = await this.userService.findOrFail(email, true, [
+    const user = await this.usersService.findOrFail(email, true, [
       'id',
       'username',
       'email',
       'password',
     ]);
 
-    await this.credentialService.validatePassword(password, user.password);
+    await this.credentialsService.validatePassword(password, user.password);
 
     const tokenPayload = { email: user.email, sub: user.id };
 

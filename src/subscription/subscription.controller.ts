@@ -3,5 +3,5 @@ import { SubscriptionService } from './subscription.service';
 
 @Controller('subscription')
 export class SubscriptionController {
-  constructor(private readonly subscriptionService: SubscriptionService) {}
+  constructor(private readonly subscriptionsService: SubscriptionService) {}
 }

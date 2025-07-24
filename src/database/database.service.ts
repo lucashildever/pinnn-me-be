@@ -14,28 +14,28 @@ import { seedPins } from './seeds/pins.seed';
 export class DatabaseService {
   constructor(
     @InjectRepository(UserEntity)
-    private readonly userRepository: Repository<UserEntity>,
+    private readonly usersRepository: Repository<UserEntity>,
     @InjectRepository(MuralEntity)
-    private readonly muralRepository: Repository<MuralEntity>,
+    private readonly muralsRepository: Repository<MuralEntity>,
     @InjectRepository(CollectionEntity)
-    private readonly collectionRepository: Repository<CollectionEntity>,
+    private readonly collectionsRepository: Repository<CollectionEntity>,
     @InjectRepository(PinEntity)
-    private readonly pinRepository: Repository<PinEntity>,
+    private readonly pinsRepository: Repository<PinEntity>,
   ) {}
 
   private async clearAllTables() {
     try {
       // deactivate foreign key check
-      await this.userRepository.query('SET FOREIGN_KEY_CHECKS = 0');
+      await this.usersRepository.query('SET FOREIGN_KEY_CHECKS = 0');
 
       // keep this order
-      await this.pinRepository.query('TRUNCATE TABLE pins');
-      await this.collectionRepository.query('TRUNCATE TABLE collections');
-      await this.muralRepository.query('TRUNCATE TABLE murals');
-      await this.userRepository.query('TRUNCATE TABLE users');
+      await this.pinsRepository.query('TRUNCATE TABLE pins');
+      await this.collectionsRepository.query('TRUNCATE TABLE collections');
+      await this.muralsRepository.query('TRUNCATE TABLE murals');
+      await this.usersRepository.query('TRUNCATE TABLE users');
 
       // activate foreign key check
-      await this.userRepository.query('SET FOREIGN_KEY_CHECKS = 1');
+      await this.usersRepository.query('SET FOREIGN_KEY_CHECKS = 1');
 
       console.log('All tables cleared successfully');
     } catch (error) {

@@ -3,19 +3,19 @@ import { UserEntity } from 'src/users/entities/user.entity';
 import { usersData } from './data/users.data';
 import * as bcrypt from 'bcrypt';
 
-export async function seedUsers(userRepository: Repository<UserEntity>) {
+export async function seedUsers(usersRepository: Repository<UserEntity>) {
   try {
     for (const userData of usersData) {
-      const exists = await userRepository.findOne({
+      const exists = await usersRepository.findOne({
         where: { email: userData.email },
       });
 
       if (!exists) {
-        const user = userRepository.create({
+        const user = usersRepository.create({
           ...userData,
           password: await bcrypt.hash(userData.password, 10),
         });
-        await userRepository.save(user);
+        await usersRepository.save(user);
         console.log(`User ${userData.username} created successfully`);
       } else {
         console.log(`User ${userData.username} already exists`);

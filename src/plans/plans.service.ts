@@ -11,9 +11,9 @@ import { CreatePlanDto } from './dto/create-plan.dto';
 export class PlansService {
   constructor(
     @InjectRepository(Plan)
-    private readonly planRepository: Repository<Plan>,
+    private readonly plansRepository: Repository<Plan>,
     @InjectRepository(Price)
-    private readonly priceRepository: Repository<Price>,
+    private readonly pricesRepository: Repository<Price>,
   ) {}
 
   async createPlan(createPlanDto: CreatePlanDto): Promise<Plan> {
@@ -23,7 +23,7 @@ export class PlansService {
       throw new BadRequestException('At least one price must be provided');
     }
 
-    const existingPlan = await this.planRepository.findOne({
+    const existingPlan = await this.plansRepository.findOne({
       where: { slug: planData.slug },
     });
 
@@ -32,7 +32,7 @@ export class PlansService {
     }
 
     if (planData.isDefault) {
-      const defaultPlan = await this.planRepository.findOne({
+      const defaultPlan = await this.plansRepository.findOne({
         where: { isDefault: true },
       });
 
@@ -43,18 +43,18 @@ export class PlansService {
       }
     }
 
-    const plan = this.planRepository.create(planData);
-    const savedPlan = await this.planRepository.save(plan);
+    const plan = this.plansRepository.create(planData);
+    const savedPlan = await this.plansRepository.save(plan);
 
     const prices = pricesData.map((priceData) =>
-      this.priceRepository.create({
+      this.pricesRepository.create({
         ...priceData,
         planId: savedPlan.id,
       }),
     );
-    await this.priceRepository.save(prices);
+    await this.pricesRepository.save(prices);
 
-    const planWithPrices = await this.planRepository.findOne({
+    const planWithPrices = await this.plansRepository.findOne({
       where: { id: savedPlan.id },
       relations: ['prices'],
     });
@@ -69,13 +69,13 @@ export class PlansService {
   }
 
   async findAllPlans(): Promise<Plan[]> {
-    return await this.planRepository.find({
+    return await this.plansRepository.find({
       relations: ['prices'],
     });
   }
 
   async findPlanById(id: string): Promise<Plan> {
-    const plan = await this.planRepository.findOne({
+    const plan = await this.plansRepository.findOne({
       where: { id },
       relations: ['prices'],
     });
@@ -88,7 +88,7 @@ export class PlansService {
   }
 
   async findPlanBySlug(slug: string): Promise<Plan> {
-    const plan = await this.planRepository.findOne({
+    const plan = await this.plansRepository.findOne({
       where: { slug },
       relations: ['prices'],
     });
