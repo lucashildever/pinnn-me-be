@@ -13,6 +13,7 @@ import { CollectionEntity } from '../../collections/entities/collection.entity';
 
 import { MuralPlan } from '../enums/mural-plan.enum';
 import { Status } from 'src/common/enums/status.enum';
+import { CallToActionEntity } from './call-to-action.entity';
 
 @Entity('murals')
 export class MuralEntity extends TimestampEntity {
@@ -61,4 +62,7 @@ export class MuralEntity extends TimestampEntity {
 
   @UpdateDateColumn({ type: 'timestamp' })
   deletedAt: Date;
+
+  @OneToMany(() => CallToActionEntity, (cta) => cta.mural)
+  ctas: CallToActionEntity[];
 }

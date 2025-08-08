@@ -21,6 +21,10 @@ import { UpdateMuralDto } from './dto/update-mural.dto';
 import { DeleteMuralDto } from './dto/delete-mural.dto';
 import { MuralDto } from './dto/mural.dto';
 
+import { CreateCallToActionDto } from './dto/call-to-action/create-call-to-action.dto';
+import { UpdateCallToActionDto } from './dto/call-to-action/update-call-to-action.dto';
+import { CallToActionDto } from './dto/call-to-action/call-to-action.dto';
+
 import { MuralsService } from './murals.service';
 
 import { AuthRequest } from 'src/common/interfaces/auth-request.interface';
@@ -63,5 +67,29 @@ export class MuralsController {
     @Body() updateMuralDto: UpdateMuralDto,
   ): Promise<UpdateMuralResponseDto> {
     return await this.muralsService.update(muralId, updateMuralDto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('cta/create/:muralId')
+  async createMuralCta(
+    @Param('muralId', new ParseUUIDPipe()) muralId: string,
+    @Body() createCallToActionDto: CreateCallToActionDto,
+  ): Promise<CallToActionDto> {
+    return this.muralsService.createCallToAction(
+      muralId,
+      createCallToActionDto,
+    );
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('cta/update/:callToActionId')
+  async updateMuralCta(
+    @Param('callToActionId', new ParseUUIDPipe()) callToActionId: string,
+    @Body() updateCallToActionDto: UpdateCallToActionDto,
+  ): Promise<CallToActionDto> {
+    return this.muralsService.updateCallToAction(
+      callToActionId,
+      updateCallToActionDto,
+    );
   }
 }

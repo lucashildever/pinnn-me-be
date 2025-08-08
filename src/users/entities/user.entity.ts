@@ -61,6 +61,7 @@ export class UserEntity extends TimestampEntity {
     type: 'varchar',
     length: 64,
     unique: true,
+    nullable: true,
   })
   stripeCustomerId?: string;
 }

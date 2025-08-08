@@ -21,12 +21,22 @@ import { PinsService } from 'src/pins/pins.service';
 
 import { MuralEntity } from './entities/mural.entity';
 import { Status } from 'src/common/enums/status.enum';
+import { CallToActionDto } from './dto/call-to-action/call-to-action.dto';
+import { CallToActionEntity } from './entities/call-to-action.entity';
+import { DisplayElementEntity } from 'src/common/entities/display-element.entity';
+import { IconType } from 'src/common/enums/icon-type.enum';
+import { UpdateCallToActionDto } from './dto/call-to-action/update-call-to-action.dto';
+import { CreateCallToActionDto } from './dto/call-to-action/create-call-to-action.dto';
 
 @Injectable()
 export class MuralsService {
   constructor(
     @InjectRepository(MuralEntity)
     private readonly muralsRepository: Repository<MuralEntity>,
+    @InjectRepository(CallToActionEntity)
+    private readonly callToActionsRepository: Repository<CallToActionEntity>,
+    @InjectRepository(DisplayElementEntity)
+    private readonly displayElementRepository: Repository<DisplayElementEntity>,
 
     private readonly collectionsService: CollectionsService,
     private readonly credentialsService: CredentialsService,
@@ -76,6 +86,23 @@ export class MuralsService {
       collections,
     };
 
+    const callToActions = await this.callToActionsRepository.find({
+      where: { muralId: mural.id },
+      relations: ['displayElement'],
+      order: { createdAt: 'ASC' },
+    });
+
+    const ctas = callToActions.map((cta) => ({
+      id: cta.id,
+      content: cta.displayElement.content,
+      iconConfig: cta.displayElement.iconConfig,
+      callToActionConfig: cta.callToActionConfig,
+    }));
+
+    if (ctas.length > 0) {
+      response.callToActions = ctas;
+    }
+
     if (getMainCollectionPins) {
       try {
         const mainCollection = await this.collectionsService.findMain(mural.id);
@@ -114,7 +141,7 @@ export class MuralsService {
       isMain: true,
       displayElement: {
         content: 'Main Collection',
-        iconConfig: { type: 'emoji', unicode: '📝' },
+        iconConfig: { type: IconType.EMOJI, unicode: '📝' },
       },
     });
 
@@ -270,5 +297,106 @@ export class MuralsService {
     }
 
     return mural;
+  }
+
+  async createCallToAction(
+    muralId: string,
+    createCallToActionDto: CreateCallToActionDto,
+  ): Promise<CallToActionDto> {
+    const mural = await this.muralsRepository.findOne({
+      where: { id: muralId },
+    });
+    if (!mural) {
+      throw new NotFoundException(`Mural com ID ${muralId} não encontrado`);
+    }
+
+    const displayElement = this.displayElementRepository.create({
+      content: createCallToActionDto.content,
+      iconConfig: createCallToActionDto.iconConfig,
+    });
+
+    const savedDisplayElement =
+      await this.displayElementRepository.save(displayElement);
+
+    const callToAction = this.callToActionsRepository.create({
+      muralId: muralId,
+      displayElementId: savedDisplayElement.id,
+      callToActionConfig: createCallToActionDto.callToActionConfig,
+    });
+
+    const savedCallToAction =
+      await this.callToActionsRepository.save(callToAction);
+
+    const createdCallToAction =
+      await this.callToActionsRepository.findOneOrFail({
+        where: { id: savedCallToAction.id },
+        relations: ['displayElement'],
+      });
+
+    return {
+      id: createdCallToAction.id,
+      content: createdCallToAction.displayElement.content,
+      iconConfig: createdCallToAction.displayElement.iconConfig,
+      callToActionConfig: createdCallToAction.callToActionConfig,
+    };
+  }
+
+  async updateCallToAction(
+    callToActionId: string,
+    updateCallToActionDto: UpdateCallToActionDto,
+  ): Promise<CallToActionDto> {
+    const existingCallToAction = await this.callToActionsRepository.findOne({
+      where: { id: callToActionId },
+      relations: ['displayElement'],
+    });
+
+    if (!existingCallToAction) {
+      throw new NotFoundException(
+        `CallToAction com ID ${callToActionId} não encontrado`,
+      );
+    }
+
+    if (
+      updateCallToActionDto.content !== undefined ||
+      updateCallToActionDto.iconConfig !== undefined
+    ) {
+      const displayElementUpdateData: Partial<DisplayElementEntity> = {};
+
+      if (updateCallToActionDto.content !== undefined) {
+        displayElementUpdateData.content = updateCallToActionDto.content;
+      }
+
+      if (updateCallToActionDto.iconConfig !== undefined) {
+        displayElementUpdateData.iconConfig = updateCallToActionDto.iconConfig;
+      }
+
+      await this.displayElementRepository.update(
+        existingCallToAction.displayElementId,
+        displayElementUpdateData,
+      );
+    }
+
+    if (updateCallToActionDto.callToActionConfig !== undefined) {
+      const callToActionUpdateData: Partial<CallToActionEntity> = {
+        callToActionConfig: updateCallToActionDto.callToActionConfig,
+      };
+
+      await this.callToActionsRepository.update(
+        callToActionId,
+        callToActionUpdateData,
+      );
+    }
+
+    const callToAction = await this.callToActionsRepository.findOneOrFail({
+      where: { id: callToActionId },
+      relations: ['displayElement'],
+    });
+
+    return {
+      id: callToAction.id,
+      content: callToAction.displayElement.content,
+      iconConfig: callToAction.displayElement.iconConfig,
+      callToActionConfig: callToAction.callToActionConfig,
+    };
   }
 }
