@@ -9,11 +9,13 @@ import { PinsService } from './pins.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CardEntity } from './entities/card.entity';
 import { PinEntity } from './entities/pin.entity';
+import { CommonModule } from 'src/common/common.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([PinEntity, CardEntity]),
     CollectionsModule,
+    CommonModule,
     CacheModule,
   ],
   providers: [PinsService],
