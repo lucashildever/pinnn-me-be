@@ -63,6 +63,7 @@ export class UsersService {
       id: user.id,
       username: user.username,
       email: user.email,
+      role: user.role,
       murals: murals.map((mural) => ({
         name: mural.mural_name,
         displayName: mural.mural_display_name,
@@ -128,6 +129,7 @@ export class UsersService {
       id: savedUser.id,
       email: savedUser.email,
       username: savedUser.username,
+      role: savedUser.role,
     };
 
     await this.cacheService.del(this.USER_CACHE_KEY(userId));
