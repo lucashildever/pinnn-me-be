@@ -1,6 +1,9 @@
-import { TimestampEntity } from 'src/common/entities/timestamp.entity';
 import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+
+import { TimestampEntity } from 'src/common/entities/timestamp.entity';
 import { Price } from './price.entity';
+
+import { PlanStatus } from '../enums/plan-status.enum';
 
 @Entity('plans')
 export class Plan extends TimestampEntity {
@@ -24,4 +27,11 @@ export class Plan extends TimestampEntity {
 
   @OneToMany(() => Price, (price) => price.plan, { cascade: true })
   prices: Price[];
+
+  @Column({
+    type: 'enum',
+    enum: PlanStatus,
+    default: PlanStatus.DRAFT,
+  })
+  status: PlanStatus;
 }
