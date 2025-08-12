@@ -36,7 +36,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
       database: process.env.DB_NAME,
       entities: [__dirname + '/**/*.entity{.ts,.js}'],
       synchronize: process.env.NODE_ENV?.toLowerCase() === 'development',
-      logging: process.env.NODE_ENV === 'development',
+      //logging: process.env.NODE_ENV === 'development',
       namingStrategy: new SnakeNamingStrategy(),
     }),
     UsersModule,
