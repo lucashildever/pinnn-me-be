@@ -15,7 +15,7 @@ import { PaymentsModule } from './payments/payments.module';
 import { DatabaseModule } from './database/database.module';
 import { CollectionsModule } from './collections/collections.module';
 import { CredentialsModule } from './credentials/credentials.module';
-import { SubscriptionModule } from './subscription/subscription.module';
+import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 
 import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
 import { WebhooksModule } from './webhooks/webhooks.module';
@@ -49,7 +49,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     CacheModule,
     CommonModule,
     PaymentsModule,
-    SubscriptionModule,
+    SubscriptionsModule,
     PlansModule,
     WebhooksModule,
   ],
