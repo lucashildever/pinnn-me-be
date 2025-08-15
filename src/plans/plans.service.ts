@@ -26,19 +26,19 @@ export class PlansService {
       throw new BadRequestException('At least one price must be provided');
     }
 
+    // Verifica se já existe plano do mesmo tipo
     const existingPlan = await this.plansRepository.findOne({
-      where: { slug: planData.slug },
+      where: { type: planData.type },
     });
-
     if (existingPlan) {
-      throw new BadRequestException('There is already a plan with this slug');
+      throw new BadRequestException(`There is already a ${planData.type} plan`);
     }
 
+    // Verifica plano padrão
     if (planData.isDefault) {
       const defaultPlan = await this.plansRepository.findOne({
         where: { isDefault: true },
       });
-
       if (defaultPlan) {
         throw new BadRequestException(
           'A default plan already exists. Set isDefault to false or remove the existing default plan',
@@ -55,7 +55,6 @@ export class PlansService {
       price.planId = savedPlan.id;
       return price;
     });
-
     await this.pricesRepository.save(priceEntities);
 
     const planWithPrices = await this.plansRepository.findOne({
@@ -71,7 +70,6 @@ export class PlansService {
 
     return this.mapPlanToResponse(planWithPrices);
   }
-
   async findAllPlans(onlyActivePlans: boolean): Promise<PlanResponseDto[]> {
     const where = onlyActivePlans ? { status: PlanStatus.ACTIVE } : {};
 
@@ -128,10 +126,9 @@ export class PlansService {
   private mapPlanToResponse(plan: Plan): PlanResponseDto {
     return {
       name: plan.name,
-      slug: plan.slug,
+      type: plan.type,
       isDefault: plan.isDefault,
       features: plan.features,
-      limits: plan.limits,
       prices: (plan.prices || []).map((p) => ({
         price: typeof p.price === 'string' ? parseFloat(p.price) : p.price,
         billingPeriod: p.billingPeriod,

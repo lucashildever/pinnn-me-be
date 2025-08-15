@@ -5,8 +5,11 @@ import {
   UpdateDateColumn,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+
 import { TimestampEntity } from 'src/common/entities/timestamp.entity';
+import { Subscription } from 'src/subscriptions/entities/subscription.entity';
 import { MuralEntity } from 'src/murals/entities/mural.entity';
+
 import { Status } from 'src/common/enums/status.enum';
 import { Role } from '../../auth/enums/role.enum';
 
@@ -17,6 +20,9 @@ export class UserEntity extends TimestampEntity {
 
   @OneToMany(() => MuralEntity, (muralEntity) => muralEntity.user)
   murals: MuralEntity[];
+
+  @OneToMany(() => Subscription, (subscription) => subscription.user)
+  subscriptions?: Subscription[];
 
   @Column({
     type: 'varchar',

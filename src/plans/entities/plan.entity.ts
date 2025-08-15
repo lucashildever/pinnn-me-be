@@ -4,6 +4,7 @@ import { TimestampEntity } from 'src/common/entities/timestamp.entity';
 import { Price } from './price.entity';
 
 import { PlanStatus } from '../enums/plan-status.enum';
+import { PlanType } from '../enums/plan-type.enum';
 
 @Entity('plans')
 export class Plan extends TimestampEntity {
@@ -13,8 +14,12 @@ export class Plan extends TimestampEntity {
   @Column()
   name: string;
 
-  @Column({ unique: true })
-  slug: string;
+  @Column({
+    type: 'enum',
+    enum: PlanType,
+    unique: true, // Only 1 plan of each type
+  })
+  type: PlanType;
 
   @Column({ default: false })
   isDefault: boolean;

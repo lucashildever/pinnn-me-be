@@ -7,19 +7,21 @@ import {
   IsNotEmpty,
   ArrayNotEmpty,
   ValidateNested,
+  IsEnum,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
 import { CreatePriceDto } from './create-price.dto';
+
+import { PlanType } from '../enums/plan-type.enum';
 
 export class CreatePlanDto {
   @IsString()
   @IsNotEmpty()
   name: string;
 
-  @IsString()
-  @IsNotEmpty()
-  slug: string;
+  @IsEnum(PlanType)
+  type: PlanType;
 
   @IsBoolean()
   @IsOptional()
@@ -30,10 +32,6 @@ export class CreatePlanDto {
   @ArrayNotEmpty()
   @IsString({ each: true })
   features: string[];
-
-  @IsObject()
-  @IsNotEmpty()
-  limits: Record<string, any>;
 
   @IsArray()
   @IsNotEmpty()
