@@ -1,38 +1,10 @@
-import {
-  IsJWT,
-  IsUUID,
-  IsEmail,
-  IsString,
-  MinLength,
-  MaxLength,
-  IsNotEmpty,
-  ValidateNested,
-} from 'class-validator';
-import { Type } from 'class-transformer';
-
-export class AuthResponseDto {
-  @IsJWT()
-  @IsNotEmpty()
+export interface AuthResponseDto {
   access_token: string;
-
-  @IsNotEmpty()
-  @ValidateNested()
-  @Type(() => AuthenticatedProfileDto)
   user: AuthenticatedProfileDto;
 }
 
-export class AuthenticatedProfileDto {
-  @IsUUID()
-  @IsNotEmpty()
+export interface AuthenticatedProfileDto {
   id: string;
-
-  @IsEmail()
-  @IsNotEmpty()
   email: string;
-
-  @IsString()
-  @IsNotEmpty()
-  @MinLength(3, { message: 'Username must be at least 3 characters' })
-  @MaxLength(30, { message: 'Username must be at most 30 characters' })
   username: string;
 }
