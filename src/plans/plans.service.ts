@@ -129,6 +129,7 @@ export class PlansService {
       type: plan.type,
       isDefault: plan.isDefault,
       features: plan.features,
+      limits: plan.limits,
       prices: (plan.prices || []).map((p) => ({
         price: typeof p.price === 'string' ? parseFloat(p.price) : p.price,
         billingPeriod: p.billingPeriod,
