@@ -1,4 +1,5 @@
 import {
+  IsEnum,
   IsArray,
   IsObject,
   IsString,
@@ -7,7 +8,6 @@ import {
   IsNotEmpty,
   ArrayNotEmpty,
   ValidateNested,
-  IsEnum,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -32,6 +32,10 @@ export class CreatePlanDto {
   @ArrayNotEmpty()
   @IsString({ each: true })
   features: string[];
+
+  @IsObject()
+  @IsNotEmpty()
+  limits: Record<string, any>;
 
   @IsArray()
   @IsNotEmpty()
