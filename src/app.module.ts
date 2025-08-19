@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+
 import configuration from 'config/configuration';
 
 import { ConfigModule } from '@nestjs/config';
@@ -13,12 +14,13 @@ import { MuralsModule } from './murals/murals.module';
 import { CommonModule } from './common/common.module';
 import { PaymentsModule } from './payments/payments.module';
 import { DatabaseModule } from './database/database.module';
+import { WebhooksModule } from './webhooks/webhooks.module';
+import { BillingsModule } from './billings/billings.module';
 import { CollectionsModule } from './collections/collections.module';
 import { CredentialsModule } from './credentials/credentials.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 
 import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
-import { WebhooksModule } from './webhooks/webhooks.module';
 
 @Module({
   imports: [
@@ -52,6 +54,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     SubscriptionsModule,
     PlansModule,
     WebhooksModule,
+    BillingsModule,
   ],
 })
 export class AppModule {}
