@@ -97,32 +97,32 @@ export class BillingsService {
 
   // Transaction methods
   async createInvoice(dto: CreateInvoiceDto): Promise<InvoiceResponseDto> {
-    const transaction = this.invoiceRepository.create(dto);
-    const saved = await this.invoiceRepository.save(transaction);
-    return this.mapTransactionToResponse(saved);
+    const invoice = this.invoiceRepository.create(dto);
+    const saved = await this.invoiceRepository.save(invoice);
+    return this.mapInvoiceToResponse(saved);
   }
 
   async getInvoiceById(id: string): Promise<InvoiceResponseDto> {
-    const transaction = await this.findTransactionById(id);
-    return this.mapTransactionToResponse(transaction);
+    const invoice = await this.findInvoiceById(id);
+    return this.mapInvoiceToResponse(invoice);
   }
 
   async updateInvoice(
     id: string,
     dto: UpdateInvoiceDto,
   ): Promise<InvoiceResponseDto> {
-    const transaction = await this.findTransactionById(id);
-    Object.assign(transaction, dto);
-    const updated = await this.invoiceRepository.save(transaction);
-    return this.mapTransactionToResponse(updated);
+    const invoice = await this.findInvoiceById(id);
+    Object.assign(invoice, dto);
+    const updated = await this.invoiceRepository.save(invoice);
+    return this.mapInvoiceToResponse(updated);
   }
 
   async getUserInvoices(
     userId: string,
     limit: number = 50,
     offset: number = 0,
-  ): Promise<{ transactions: InvoiceResponseDto[]; total: number }> {
-    const [transactions, total] = await this.invoiceRepository.findAndCount({
+  ): Promise<{ invoices: InvoiceResponseDto[]; total: number }> {
+    const [invoices, total] = await this.invoiceRepository.findAndCount({
       where: { billingInfo: { userId } },
       relations: ['subscription'],
       order: { createdAt: 'DESC' },
@@ -131,70 +131,69 @@ export class BillingsService {
     });
 
     return {
-      transactions: transactions.map((t) => this.mapTransactionToResponse(t)),
+      invoices: invoices.map((t) => this.mapInvoiceToResponse(t)),
       total,
     };
   }
 
-  async getTransactionsByStatus(
+  async getInvoicesByStatus(
     status: InvoiceStatus,
     limit: number = 50,
   ): Promise<InvoiceResponseDto[]> {
-    const transactions = await this.invoiceRepository.find({
+    const invoices = await this.invoiceRepository.find({
       where: { status },
       relations: ['billingInfo', 'subscription'],
       order: { createdAt: 'DESC' },
       take: limit,
     });
 
-    return transactions.map((t) => this.mapTransactionToResponse(t));
+    return invoices.map((t) => this.mapInvoiceToResponse(t));
   }
 
   // Private helper for internal use
-  private async findTransactionById(id: string): Promise<Invoice> {
-    const transaction = await this.invoiceRepository.findOne({
+  private async findInvoiceById(id: string): Promise<Invoice> {
+    const invoice = await this.invoiceRepository.findOne({
       where: { id },
       relations: ['billingInfo', 'subscription'],
     });
 
-    if (!transaction) {
-      throw new NotFoundException('Transaction not found');
+    if (!invoice) {
+      throw new NotFoundException('invoice not found');
     }
 
-    return transaction;
+    return invoice;
   }
 
   // Helper methods
   async getUserBillingStats(userId: string) {
     const billingInfo = await this.findBillingInfoByUserId(userId);
 
-    const [totalTransactions, successfulTransactions, totalSpent] =
-      await Promise.all([
-        this.invoiceRepository.count({
-          where: { billingInfoId: billingInfo.id },
-        }),
-        this.invoiceRepository.count({
-          where: {
-            billingInfoId: billingInfo.id,
-            status: InvoiceStatus.COMPLETED,
-          },
-        }),
-        this.invoiceRepository
-          .createQueryBuilder('transaction')
-          .select('SUM(transaction.amount)', 'total')
-          .where('transaction.billingInfoId = :billingInfoId', {
-            billingInfoId: billingInfo.id,
-          })
-          .andWhere('transaction.status = :status', {
-            status: InvoiceStatus.COMPLETED,
-          })
-          .getRawOne(),
-      ]);
+    const [totalInvoices, successfulInvoices, totalSpent] = await Promise.all([
+      this.invoiceRepository.count({
+        where: { billingInfoId: billingInfo.id },
+      }),
+      this.invoiceRepository.count({
+        where: {
+          billingInfoId: billingInfo.id,
+          status: InvoiceStatus.COMPLETED,
+        },
+      }),
+      this.invoiceRepository
+        .createQueryBuilder('transaction')
+        .select('SUM(transaction.amount)', 'total')
+        .where('transaction.billingInfoId = :billingInfoId', {
+          billingInfoId: billingInfo.id,
+        })
+        .andWhere('transaction.status = :status', {
+          status: InvoiceStatus.COMPLETED,
+        })
+        .getRawOne(),
+    ]);
 
     return {
-      totalTransactions,
-      successfulTransactions,
-      failedTransactions: totalTransactions - successfulTransactions,
+      totalInvoices,
+      successfulInvoices,
+      failedInvoices: totalInvoices - successfulInvoices,
       totalSpent: parseFloat(totalSpent?.total || '0'),
       currency: billingInfo.currency,
     };
@@ -221,18 +220,18 @@ export class BillingsService {
     };
   }
 
-  private mapTransactionToResponse(transaction: Invoice): InvoiceResponseDto {
+  private mapInvoiceToResponse(invoice: Invoice): InvoiceResponseDto {
     return {
-      id: transaction.id,
-      type: transaction.type,
-      status: transaction.status,
-      amount: parseFloat(transaction.amount.toString()),
-      currency: transaction.currency,
-      planName: transaction.planName,
-      planType: transaction.planType,
-      description: transaction.description,
-      processedAt: transaction.processedAt,
-      createdAt: transaction.createdAt,
+      id: invoice.id,
+      type: invoice.type,
+      status: invoice.status,
+      amount: parseFloat(invoice.amount.toString()),
+      currency: invoice.currency,
+      planName: invoice.planName,
+      planType: invoice.planType,
+      description: invoice.description,
+      processedAt: invoice.processedAt,
+      createdAt: invoice.createdAt,
     };
   }
 }

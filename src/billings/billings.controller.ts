@@ -31,8 +31,6 @@ import { InvoiceStatus } from './enums/invoice-status.enum';
 export class BillingsController {
   constructor(private readonly billingsService: BillingsService) {}
 
-  // TODO - updates names from 'transaction' to 'invoice'
-
   // BillingInfo
   @Post('info/:userId')
   @UseGuards(JwtAuthGuard)
@@ -65,14 +63,14 @@ export class BillingsController {
   @Post('invoices')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Create invoice' })
-  async createTransaction(@Body() dto: CreateInvoiceDto) {
+  async createInvoice(@Body() dto: CreateInvoiceDto) {
     return this.billingsService.createInvoice(dto);
   }
 
   @Get('invoices/:id')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get invoice by ID' })
-  async getTransaction(@Param('id') id: string) {
+  async getInvoice(@Param('id') id: string) {
     return this.billingsService.getInvoiceById(id);
   }
 
@@ -80,10 +78,7 @@ export class BillingsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.SUPER_ADMIN)
   @ApiOperation({ summary: 'Update invoice status' })
-  async updateTransaction(
-    @Param('id') id: string,
-    @Body() dto: UpdateInvoiceDto,
-  ) {
+  async updateInvoice(@Param('id') id: string, @Body() dto: UpdateInvoiceDto) {
     return this.billingsService.updateInvoice(id, dto);
   }
 
@@ -95,14 +90,14 @@ export class BillingsController {
     @Query('limit') limit: number = 50,
     @Query('offset') offset: number = 0,
   ) {
-    const { transactions, total } = await this.billingsService.getUserInvoices(
+    const { invoices, total } = await this.billingsService.getUserInvoices(
       userId,
       limit,
       offset,
     );
 
     return {
-      data: transactions,
+      data: invoices,
       total,
       limit,
       offset,
@@ -121,18 +116,18 @@ export class BillingsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.SUPER_ADMIN)
   @ApiOperation({ summary: 'Get invoices by status (admin)' })
-  async getTransactionsByStatus(
+  async getInvoicesByStatus(
     @Param('status') status: InvoiceStatus,
     @Query('limit') limit: number = 50,
   ) {
-    const transactions = await this.billingsService.getTransactionsByStatus(
+    const invoices = await this.billingsService.getInvoicesByStatus(
       status,
       limit,
     );
 
     return {
-      data: transactions,
-      total: transactions.length,
+      data: invoices,
+      total: invoices.length,
     };
   }
 }
