@@ -1,11 +1,21 @@
-import { Controller, Post, Get, Body, UseGuards, Req } from '@nestjs/common';
+import {
+  Req,
+  Post,
+  Get,
+  Body,
+  Query,
+  UseGuards,
+  Controller,
+} from '@nestjs/common';
+
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth-guard';
+import { AuthRequest } from 'src/common/interfaces/auth-request.interface';
 
 import { PaymentsService } from './payments.service';
 
-import { CreateCustomerPortalDto } from './dto/create-customer-portal.dto';
+import { CheckoutSessionResponseDto } from './dto/checkout-session-response.dto';
 import { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
-import { AuthRequest } from 'src/common/interfaces/auth-request.interface';
+import { CreateCustomerPortalDto } from './dto/create-customer-portal.dto';
 
 @Controller('payments')
 export class PaymentsController {
@@ -16,14 +26,22 @@ export class PaymentsController {
   async createCheckoutSession(
     @Body() createSessionDto: CreateCheckoutSessionDto,
     @Req() req: AuthRequest,
+  ): Promise<CheckoutSessionResponseDto> {
+    return await this.paymentsService.createCheckoutSession(
+      req.user.id,
+      createSessionDto.planType,
+      createSessionDto.period,
+    );
+  }
+
+  @Get('session-status')
+  @UseGuards(JwtAuthGuard)
+  async getSessionStatus(
+    @Query('session_id') sessionId: string,
+    @Req() req: AuthRequest,
   ) {
     const userId = req.user.id;
-    return this.paymentsService.createCheckoutSession(
-      userId,
-      createSessionDto.planType,
-      createSessionDto.successUrl,
-      createSessionDto.cancelUrl,
-    );
+    return this.paymentsService.getSessionStatus(sessionId, userId);
   }
 
   @Post('create-customer-portal')

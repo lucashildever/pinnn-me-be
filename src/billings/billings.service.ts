@@ -7,23 +7,24 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { BillingInfo } from './entities/billing-info.entity';
-import { Transaction } from './entities/transaction.entity';
+import { Invoice } from './entities/invoice.entity';
 
 import { BillingInfoResponseDto } from './dto/billing-response.dto';
-import { TransactionResponseDto } from './dto/transaction-response.dto';
+import { InvoiceResponseDto } from './dto/invoice-response.dto';
 import { UpdateBillingInfoDto } from './dto/update-billing-info.dto';
 import { CreateBillingInfoDto } from './dto/create-billing-info.dto';
-import { CreateTransactionDto } from './dto/create-transaction.dto';
-import { UpdateTransactionDto } from './dto/update-transaction.dto';
-import { TransactionStatus } from './enums/transaction-status.enum';
+import { CreateInvoiceDto } from './dto/create-invoice.dto';
+import { UpdateInvoiceDto } from './dto/update-invoice.dto';
+
+import { InvoiceStatus } from './enums/invoice-status.enum';
 
 @Injectable()
 export class BillingsService {
   constructor(
     @InjectRepository(BillingInfo)
     private readonly billingInfoRepository: Repository<BillingInfo>,
-    @InjectRepository(Transaction)
-    private readonly transactionRepository: Repository<Transaction>,
+    @InjectRepository(Invoice)
+    private readonly invoiceRepository: Repository<Invoice>,
   ) {}
 
   async createBillingInfo(
@@ -95,43 +96,39 @@ export class BillingsService {
   }
 
   // Transaction methods
-  async createTransaction(
-    dto: CreateTransactionDto,
-  ): Promise<TransactionResponseDto> {
-    const transaction = this.transactionRepository.create(dto);
-    const saved = await this.transactionRepository.save(transaction);
+  async createInvoice(dto: CreateInvoiceDto): Promise<InvoiceResponseDto> {
+    const transaction = this.invoiceRepository.create(dto);
+    const saved = await this.invoiceRepository.save(transaction);
     return this.mapTransactionToResponse(saved);
   }
 
-  async getTransactionById(id: string): Promise<TransactionResponseDto> {
+  async getInvoiceById(id: string): Promise<InvoiceResponseDto> {
     const transaction = await this.findTransactionById(id);
     return this.mapTransactionToResponse(transaction);
   }
 
-  async updateTransaction(
+  async updateInvoice(
     id: string,
-    dto: UpdateTransactionDto,
-  ): Promise<TransactionResponseDto> {
+    dto: UpdateInvoiceDto,
+  ): Promise<InvoiceResponseDto> {
     const transaction = await this.findTransactionById(id);
     Object.assign(transaction, dto);
-    const updated = await this.transactionRepository.save(transaction);
+    const updated = await this.invoiceRepository.save(transaction);
     return this.mapTransactionToResponse(updated);
   }
 
-  async getUserTransactions(
+  async getUserInvoices(
     userId: string,
     limit: number = 50,
     offset: number = 0,
-  ): Promise<{ transactions: TransactionResponseDto[]; total: number }> {
-    const [transactions, total] = await this.transactionRepository.findAndCount(
-      {
-        where: { billingInfo: { userId } },
-        relations: ['subscription'],
-        order: { createdAt: 'DESC' },
-        take: limit,
-        skip: offset,
-      },
-    );
+  ): Promise<{ transactions: InvoiceResponseDto[]; total: number }> {
+    const [transactions, total] = await this.invoiceRepository.findAndCount({
+      where: { billingInfo: { userId } },
+      relations: ['subscription'],
+      order: { createdAt: 'DESC' },
+      take: limit,
+      skip: offset,
+    });
 
     return {
       transactions: transactions.map((t) => this.mapTransactionToResponse(t)),
@@ -140,10 +137,10 @@ export class BillingsService {
   }
 
   async getTransactionsByStatus(
-    status: TransactionStatus,
+    status: InvoiceStatus,
     limit: number = 50,
-  ): Promise<TransactionResponseDto[]> {
-    const transactions = await this.transactionRepository.find({
+  ): Promise<InvoiceResponseDto[]> {
+    const transactions = await this.invoiceRepository.find({
       where: { status },
       relations: ['billingInfo', 'subscription'],
       order: { createdAt: 'DESC' },
@@ -154,8 +151,8 @@ export class BillingsService {
   }
 
   // Private helper for internal use
-  private async findTransactionById(id: string): Promise<Transaction> {
-    const transaction = await this.transactionRepository.findOne({
+  private async findTransactionById(id: string): Promise<Invoice> {
+    const transaction = await this.invoiceRepository.findOne({
       where: { id },
       relations: ['billingInfo', 'subscription'],
     });
@@ -173,23 +170,23 @@ export class BillingsService {
 
     const [totalTransactions, successfulTransactions, totalSpent] =
       await Promise.all([
-        this.transactionRepository.count({
+        this.invoiceRepository.count({
           where: { billingInfoId: billingInfo.id },
         }),
-        this.transactionRepository.count({
+        this.invoiceRepository.count({
           where: {
             billingInfoId: billingInfo.id,
-            status: TransactionStatus.COMPLETED,
+            status: InvoiceStatus.COMPLETED,
           },
         }),
-        this.transactionRepository
+        this.invoiceRepository
           .createQueryBuilder('transaction')
           .select('SUM(transaction.amount)', 'total')
           .where('transaction.billingInfoId = :billingInfoId', {
             billingInfoId: billingInfo.id,
           })
           .andWhere('transaction.status = :status', {
-            status: TransactionStatus.COMPLETED,
+            status: InvoiceStatus.COMPLETED,
           })
           .getRawOne(),
       ]);
@@ -224,9 +221,7 @@ export class BillingsService {
     };
   }
 
-  private mapTransactionToResponse(
-    transaction: Transaction,
-  ): TransactionResponseDto {
+  private mapTransactionToResponse(transaction: Invoice): InvoiceResponseDto {
     return {
       id: transaction.id,
       type: transaction.type,
@@ -238,7 +233,6 @@ export class BillingsService {
       description: transaction.description,
       processedAt: transaction.processedAt,
       createdAt: transaction.createdAt,
-      stripePaymentIntentId: transaction.stripePaymentIntentId,
     };
   }
 }

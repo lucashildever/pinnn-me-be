@@ -1,11 +1,21 @@
-// src/payments/payments.service.ts
 import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  InternalServerErrorException,
+  UnauthorizedException,
 } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
+import { Repository } from 'typeorm';
+
+import { BillingInfo } from 'src/billings/entities/billing-info.entity';
+import { UserEntity } from 'src/users/entities/user.entity';
+
+import { PaymentPeriod } from './enums/payment-period.enum';
+
 import Stripe from 'stripe';
+import { CheckoutSessionResponseDto } from './dto/checkout-session-response.dto';
 
 @Injectable()
 export class PaymentsService {
@@ -13,10 +23,10 @@ export class PaymentsService {
 
   constructor(
     private configService: ConfigService,
-    // Inject do BillingsService para registrar transações
-    // private billingsService: BillingsService,
-    // Inject do UsersService para buscar/atualizar dados do usuário
-    // private usersService: UsersService,
+    @InjectRepository(UserEntity)
+    private readonly usersRepository: Repository<UserEntity>,
+    @InjectRepository(BillingInfo)
+    private readonly billingInfoRepository: Repository<BillingInfo>,
   ) {
     const stripeSecretKey = this.configService.get<string>('stripe.secretKey');
 
@@ -29,23 +39,20 @@ export class PaymentsService {
     this.stripe = new Stripe(stripeSecretKey);
   }
 
-  // Criar sessão de checkout
   async createCheckoutSession(
     userId: string,
-    planType: 'premium',
-    successUrl: string,
-    cancelUrl: string,
-  ) {
+    planType: 'pro',
+    period: PaymentPeriod,
+  ): Promise<CheckoutSessionResponseDto> {
     try {
-      // Buscar ou criar customer no Stripe
-      const customer = await this.getOrCreateCustomer(userId);
-
-      // Definir price ID baseado no plano (você deve criar esses produtos no dashboard do Stripe)
-      const priceId = this.getPriceIdByPlan(planType);
+      const customer = await this.getOrCreateStripeCustomer(userId);
+      const priceId = this.getPriceIdByPlan(planType, period);
 
       const session = await this.stripe.checkout.sessions.create({
         customer: customer.id,
         payment_method_types: ['card'],
+        ui_mode: 'embedded',
+        redirect_on_completion: 'never',
         mode: 'subscription',
         line_items: [
           {
@@ -53,8 +60,6 @@ export class PaymentsService {
             quantity: 1,
           },
         ],
-        success_url: successUrl,
-        cancel_url: cancelUrl,
         metadata: {
           userId: userId,
           planType: planType,
@@ -65,11 +70,34 @@ export class PaymentsService {
 
       return {
         sessionId: session.id,
-        url: session.url,
+        clientSecret: session.client_secret,
       };
     } catch (error) {
       throw new BadRequestException(
-        `Erro ao criar sessão de checkout: ${error.message}`,
+        `Error while trying to create checkout session: ${error.message}`,
+      );
+    }
+  }
+
+  async getSessionStatus(sessionId: string, userId: string) {
+    try {
+      const session = await this.stripe.checkout.sessions.retrieve(sessionId);
+
+      if (session.metadata?.userId !== userId) {
+        // security check
+        throw new UnauthorizedException('Sessão não pertence ao usuário');
+      }
+
+      return {
+        status: session.status,
+        payment_status: session.payment_status,
+        customer_email: session.customer_details?.email,
+        amount_total: session.amount_total,
+        currency: session.currency,
+      };
+    } catch (error) {
+      throw new BadRequestException(
+        `Erro ao buscar status da sessão: ${error.message}`,
       );
     }
   }
@@ -244,37 +272,146 @@ export class PaymentsService {
     }
   }
 
-  // Métodos auxiliares privados
-  private async getOrCreateCustomer(userId: string): Promise<Stripe.Customer> {
-    // TODO: Implementar busca do usuário no banco
-    // const user = await this.usersService.findById(userId);
-    // Mockup - (você deve implementar a busca real)
-    const userEmail = `user-${userId}@example.com`;
-
-    // Verificar se já existe customer
-    const existingCustomers = await this.stripe.customers.list({
-      email: userEmail,
-      limit: 1,
+  // Private helpers
+  private async getOrCreateStripeCustomer(
+    userId: string,
+  ): Promise<Stripe.Customer> {
+    const { email } = await this.usersRepository.findOneOrFail({
+      select: { email: true },
+      where: { id: userId },
     });
 
-    if (existingCustomers.data.length > 0) {
-      return existingCustomers.data[0];
+    const billingInfo = await this.billingInfoRepository.findOneOrFail({
+      select: { stripeCustomerId: true, fullName: true },
+      where: { userId },
+    });
+
+    if (billingInfo.stripeCustomerId) {
+      try {
+        const customerFromStripe = await this.stripe.customers.retrieve(
+          billingInfo.stripeCustomerId,
+        );
+
+        if (customerFromStripe.deleted) {
+          await this.billingInfoRepository.update(
+            { userId },
+            { stripeCustomerId: undefined },
+          );
+        } else {
+          return customerFromStripe as Stripe.Customer;
+        }
+      } catch (error) {
+        if (error.type === 'StripeInvalidRequestError') {
+          await this.billingInfoRepository.update(
+            { userId },
+            { stripeCustomerId: undefined },
+          );
+        } else {
+          throw error;
+        }
+      }
     }
 
-    // Criar novo customer
-    const customer = await this.stripe.customers.create({
-      email: userEmail,
-      metadata: {
-        userId: userId,
-      },
-    });
+    const existingStripeCustomer = await this.findExistingStripeCustomer(
+      email,
+      userId,
+    );
 
-    // TODO: Salvar customer ID no banco de dados do usuário
-    // await this.usersService.updateStripeCustomerId(userId, customer.id);
+    if (existingStripeCustomer) {
+      await this.saveBillingInfo(userId, existingStripeCustomer.id);
+      return existingStripeCustomer;
+    }
+
+    const customer = await this.createStripeCustomer(
+      billingInfo.fullName,
+      email,
+      userId,
+    );
+
+    await this.saveBillingInfo(userId, customer.id);
 
     return customer;
   }
 
+  private async findExistingStripeCustomer(
+    email: string,
+    userId: string,
+  ): Promise<Stripe.Customer | null> {
+    try {
+      const customers = await this.stripe.customers.list({ email, limit: 1 });
+
+      const customer = customers.data[0];
+
+      if (!customer) {
+        return null;
+      }
+
+      if (customer.metadata?.userId === userId) {
+        return customer;
+      }
+
+      return null;
+    } catch (error) {
+      if (
+        error.type === 'StripeConnectionError' ||
+        error.type === 'StripeAPIError'
+      ) {
+        throw error;
+      }
+
+      return null;
+    }
+  }
+
+  private async createStripeCustomer(
+    name: string,
+    email: string,
+    userId: string,
+  ): Promise<Stripe.Customer> {
+    const idempotencyKey = `create-customer-user-${userId}`;
+
+    try {
+      return await this.stripe.customers.create(
+        {
+          email: email,
+          name: name,
+          metadata: { userId },
+        },
+        { idempotencyKey },
+      );
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Error while trying to create Stripe customer',
+      );
+    }
+  }
+
+  private async saveBillingInfo(
+    userId: string,
+    customerId: string,
+  ): Promise<void> {
+    try {
+      const result = await this.billingInfoRepository.update(
+        { userId },
+        { stripeCustomerId: customerId },
+      );
+
+      if (result.affected === 0) {
+        await this.billingInfoRepository.save({
+          userId,
+          stripeCustomerId: customerId,
+        });
+      }
+    } catch (error) {
+      // Don't perform a Stripe rollback if it can't register the stripeCustomerId in the local DB.
+      // The next execution of findExistingStripeCustomer will automatically synchronize it.
+      throw new InternalServerErrorException(
+        'Error while trying to save billing info',
+      );
+    }
+  }
+
+  ////
   private async getCustomerByUserId(
     userId: string,
   ): Promise<Stripe.Customer | null> {
@@ -293,11 +430,10 @@ export class PaymentsService {
     return customers.data.length > 0 ? customers.data[0] : null;
   }
 
-  // private getPriceIdByPlan(planType: 'premium'): string {
-  private getPriceIdByPlan(planType: 'premium') {
-    // TODO: Configurar no .env ou banco de dados
+  private getPriceIdByPlan(planType: 'pro', period: PaymentPeriod) {
     const priceIds = {
-      premium: this.configService.get<string>('STRIPE_PREMIUM_PRICE_ID'),
+      pro: this.configService.get<string>(`stripe.prices.pro.${period}`),
+      // Add more prices/plans here
     };
 
     return priceIds[planType];

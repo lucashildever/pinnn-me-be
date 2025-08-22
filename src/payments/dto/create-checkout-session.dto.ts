@@ -1,5 +1,12 @@
+import { IsEnum, IsNotEmpty, IsString } from 'class-validator';
+import { PaymentPeriod } from '../enums/payment-period.enum';
+
 export class CreateCheckoutSessionDto {
-  planType: 'premium';
-  successUrl: string;
-  cancelUrl: string;
+  @IsString()
+  @IsNotEmpty()
+  planType: 'pro';
+
+  @IsNotEmpty()
+  @IsEnum(PaymentPeriod)
+  period: PaymentPeriod;
 }
