@@ -1,6 +1,7 @@
 import {
   Entity,
   Column,
+  OneToMany,
   ManyToOne,
   JoinColumn,
   PrimaryGeneratedColumn,
@@ -9,17 +10,25 @@ import {
 import { TimestampEntity } from 'src/common/entities/timestamp.entity';
 import { Subscription } from 'src/subscriptions/entities/subscription.entity';
 import { BillingInfo } from './billing-info.entity';
+import { UserEntity } from 'src/users/entities/user.entity';
+import { Payment } from 'src/payments/entities/payment.entity';
 
-import { TransactionStatus } from '../enums/transaction-status.enum';
-import { TransactionType } from '../enums/transaction-type.enum';
+import { InvoiceStatus } from '../enums/invoice-status.enum';
+import { InvoiceType } from '../enums/invoice-type.enum';
 import { PlanType } from 'src/plans/enums/plan-type.enum';
 
-@Entity('transactions')
-export class Transaction extends TimestampEntity {
+@Entity('invoices')
+export class Invoice extends TimestampEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ManyToOne(() => BillingInfo, (billingInfo) => billingInfo.transactions)
+  @ManyToOne(() => UserEntity, (user) => user.invoices, { nullable: false })
+  user: UserEntity;
+
+  @OneToMany(() => Payment, (payment) => payment.invoice)
+  payments: Payment[];
+
+  @ManyToOne(() => BillingInfo, (billingInfo) => billingInfo.invoices)
   @JoinColumn({ name: 'billingInfoId' })
   billingInfo?: BillingInfo;
 
@@ -33,37 +42,31 @@ export class Transaction extends TimestampEntity {
   @Column({ nullable: true })
   subscriptionId?: string;
 
-  // Transaction data
   @Column({
     type: 'enum',
-    enum: TransactionType,
+    enum: InvoiceType,
   })
-  type: TransactionType;
+  type: InvoiceType;
 
   @Column({
     type: 'enum',
-    enum: TransactionStatus,
-    default: TransactionStatus.PENDING,
+    enum: InvoiceStatus,
+    default: InvoiceStatus.PENDING,
   })
-  status: TransactionStatus;
+  status: InvoiceStatus;
 
   // Values
   @Column({ type: 'decimal', precision: 10, scale: 2 })
-  amount: number;
+  amount: number; // Amount in the moment of registration (ex: of user have a 15% discount)
 
   @Column({ default: 'BRL' })
   currency: string;
 
-  // Stripe
-  @Column({ nullable: true })
-  stripePaymentIntentId?: string; // pi_xxx
-
   @Column({ nullable: true })
   stripeInvoiceId?: string; // in_xxx
 
-  // Plan type (to keep history)
   @Column({ nullable: true })
-  planName?: string;
+  planName?: string; // Plan name in the moment of registration (ex: PlanType may change in the future)
 
   @Column({
     type: 'enum',
