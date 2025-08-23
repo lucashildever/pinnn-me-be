@@ -2,20 +2,27 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
-  InternalServerErrorException,
   UnauthorizedException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
 
 import { BillingInfo } from 'src/billings/entities/billing-info.entity';
-import { UserEntity } from 'src/users/entities/user.entity';
 
 import { PaymentPeriod } from './enums/payment-period.enum';
 
-import Stripe from 'stripe';
 import { CheckoutSessionResponseDto } from './dto/checkout-session-response.dto';
+
+import { BillingsService } from 'src/billings/billings.service';
+import { UsersService } from 'src/users/users.service';
+
+import { ReactivateStripeSubscriptionResponseDto } from './dto/reactivate-stripe-subscription-response.dto';
+import { SessionStatusDto } from './dto/session-status.dto';
+
+import Stripe from 'stripe';
+import { StripeInvoiceDto } from './dto/stripe-invoice.dto';
 
 @Injectable()
 export class PaymentsService {
@@ -23,10 +30,12 @@ export class PaymentsService {
 
   constructor(
     private configService: ConfigService,
-    @InjectRepository(UserEntity)
-    private readonly usersRepository: Repository<UserEntity>,
+
     @InjectRepository(BillingInfo)
     private readonly billingInfoRepository: Repository<BillingInfo>,
+
+    private readonly billingsService: BillingsService,
+    private readonly usersService: UsersService,
   ) {
     const stripeSecretKey = this.configService.get<string>('stripe.secretKey');
 
@@ -45,7 +54,7 @@ export class PaymentsService {
     period: PaymentPeriod,
   ): Promise<CheckoutSessionResponseDto> {
     try {
-      const customer = await this.getOrCreateStripeCustomer(userId);
+      const customer = await this.findOrCreateStripeCustomer(userId);
       const priceId = this.getPriceIdByPlan(planType, period);
 
       const session = await this.stripe.checkout.sessions.create({
@@ -79,13 +88,18 @@ export class PaymentsService {
     }
   }
 
-  async getSessionStatus(sessionId: string, userId: string) {
+  async findSessionStatus(
+    sessionId: string,
+    userId: string,
+  ): Promise<SessionStatusDto> {
     try {
       const session = await this.stripe.checkout.sessions.retrieve(sessionId);
 
+      // security check
       if (session.metadata?.userId !== userId) {
-        // security check
-        throw new UnauthorizedException('Sessão não pertence ao usuário');
+        throw new UnauthorizedException(
+          "This session doesn't belongs to this user!",
+        );
       }
 
       return {
@@ -97,18 +111,20 @@ export class PaymentsService {
       };
     } catch (error) {
       throw new BadRequestException(
-        `Erro ao buscar status da sessão: ${error.message}`,
+        `Error while trying to get session status: ${error.message}`,
       );
     }
   }
 
-  // Criar portal do cliente
-  async createCustomerPortal(userId: string, returnUrl: string) {
+  async createCustomerPortal(
+    userId: string,
+    returnUrl: string,
+  ): Promise<{ url: string }> {
     try {
-      const customer = await this.getCustomerByUserId(userId);
+      const customer = await this.findCustomerByUserId(userId);
 
       if (!customer) {
-        throw new NotFoundException('Cliente não encontrado');
+        throw new NotFoundException('Customer not found!');
       }
 
       const session = await this.stripe.billingPortal.sessions.create({
@@ -121,110 +137,41 @@ export class PaymentsService {
       };
     } catch (error) {
       throw new BadRequestException(
-        `Erro ao criar portal do cliente: ${error.message}`,
+        `Error while trying to create customer portal: ${error.message}`,
       );
     }
   }
 
-  // Obter status da assinatura
-  async getSubscriptionStatus(userId: string) {
+  async cancelStripeSubscription(
+    stripeSubscriptionId: string,
+  ): Promise<Stripe.Subscription> {
+    return await this.stripe.subscriptions.update(stripeSubscriptionId, {
+      cancel_at_period_end: true,
+    });
+  }
+
+  async reactivateStripeSubscription(
+    userId: string,
+  ): Promise<ReactivateStripeSubscriptionResponseDto> {
     try {
-      const customer = await this.getCustomerByUserId(userId);
+      const customer = await this.findCustomerByUserId(userId);
 
       if (!customer) {
-        return {
-          hasActiveSubscription: false,
-          plan: 'free',
-          status: null,
-        };
+        throw new NotFoundException('Stripe customer not found!');
       }
 
-      const subscriptions = await this.stripe.subscriptions.list({
+      const subscriptionsResponse = await this.stripe.subscriptions.list({
         customer: customer.id,
         status: 'all',
         limit: 1,
       });
 
-      const activeSubscription = subscriptions.data.find((sub) =>
-        ['active', 'trialing'].includes(sub.status),
-      );
-
-      return {
-        hasActiveSubscription: !!activeSubscription,
-        plan: activeSubscription ? 'premium' : 'free',
-        status: activeSubscription?.status || null,
-        // currentPeriodEnd: activeSubscription?.currentPeriodEnd
-        //   ? new Date(activeSubscription.current_period_end * 1000)
-        //   : null,
-      };
-    } catch (error) {
-      throw new BadRequestException(
-        `Erro ao obter status da assinatura: ${error.message}`,
-      );
-    }
-  }
-
-  // Cancelar assinatura
-  async cancelSubscription(userId: string) {
-    try {
-      const customer = await this.getCustomerByUserId(userId);
-
-      if (!customer) {
-        throw new NotFoundException('Cliente não encontrado');
-      }
-
-      const subscriptions = await this.stripe.subscriptions.list({
-        customer: customer.id,
-        status: 'active',
-        limit: 1,
-      });
-
-      if (subscriptions.data.length === 0) {
-        throw new NotFoundException('Assinatura ativa não encontrada');
-      }
-
-      const subscription = subscriptions.data[0];
-
-      // Cancelar no final do período atual
-      const updatedSubscription = await this.stripe.subscriptions.update(
-        subscription.id,
-        {
-          cancel_at_period_end: true,
-        },
-      );
-
-      return {
-        message: 'Assinatura será cancelada no final do período atual',
-        //cancelAt: new Date(updatedSubscription.current_period_end * 1000),
-      };
-    } catch (error) {
-      throw new BadRequestException(
-        `Erro ao cancelar assinatura: ${error.message}`,
-      );
-    }
-  }
-
-  // Reativar assinatura
-  async reactivateSubscription(userId: string) {
-    try {
-      const customer = await this.getCustomerByUserId(userId);
-
-      if (!customer) {
-        throw new NotFoundException('Cliente não encontrado');
-      }
-
-      const subscriptions = await this.stripe.subscriptions.list({
-        customer: customer.id,
-        status: 'all',
-        limit: 1,
-      });
-
-      const subscription = subscriptions.data.find(
+      const subscription = subscriptionsResponse.data.find(
         (sub) => sub.cancel_at_period_end === true,
       );
 
       if (!subscription) {
-        throw new NotFoundException('Assinatura cancelada não encontrada');
+        throw new NotFoundException('Canceled subscription not found!');
       }
 
       const updatedSubscription = await this.stripe.subscriptions.update(
@@ -235,20 +182,21 @@ export class PaymentsService {
       );
 
       return {
-        message: 'Assinatura reativada com sucesso',
+        message: 'Subscription reactivated successfully',
         status: updatedSubscription.status,
       };
     } catch (error) {
       throw new BadRequestException(
-        `Erro ao reativar assinatura: ${error.message}`,
+        `Error while trying to reactivate subscription: ${error.message}`,
       );
     }
   }
 
-  // Obter faturas do cliente
-  async getCustomerInvoices(userId: string) {
+  async findStripeCustomerInvoices(
+    userId: string,
+  ): Promise<StripeInvoiceDto[]> {
     try {
-      const customer = await this.getCustomerByUserId(userId);
+      const customer = await this.findCustomerByUserId(userId);
 
       if (!customer) {
         return [];
@@ -259,53 +207,55 @@ export class PaymentsService {
         limit: 10,
       });
 
-      return invoices.data.map((invoice) => ({
-        id: invoice.id,
-        amount: invoice.amount_paid / 100, // Converter de centavos
-        currency: invoice.currency,
-        status: invoice.status,
-        created: new Date(invoice.created * 1000),
-        pdfUrl: invoice.invoice_pdf,
-      }));
+      return invoices.data.map(
+        (invoice): StripeInvoiceDto => ({
+          id: invoice.id,
+          amount: invoice.amount_paid / 100, // Stripe store values in cents
+          currency: invoice.currency,
+          status: invoice.status,
+          created: new Date(invoice.created * 1000),
+          pdfUrl: invoice.invoice_pdf,
+        }),
+      );
     } catch (error) {
-      throw new BadRequestException(`Erro ao obter faturas: ${error.message}`);
+      throw new BadRequestException(
+        `Error while trying to get invoices: ${error.message}`,
+      );
     }
   }
 
   // Private helpers
-  private async getOrCreateStripeCustomer(
+  private async findOrCreateStripeCustomer(
     userId: string,
   ): Promise<Stripe.Customer> {
-    const { email } = await this.usersRepository.findOneOrFail({
-      select: { email: true },
-      where: { id: userId },
-    });
+    const userEmail = (
+      await this.usersService.findOrFail(userId, true, ['email'])
+    ).email;
 
-    const billingInfo = await this.billingInfoRepository.findOneOrFail({
-      select: { stripeCustomerId: true, fullName: true },
-      where: { userId },
-    });
+    const { stripeCustomerId, fullName } =
+      await this.billingsService.findBillingInfoByUserId(userId);
 
-    if (billingInfo.stripeCustomerId) {
+    // if customerId is defined in local DB/billingInfo
+    if (stripeCustomerId) {
       try {
-        const customerFromStripe = await this.stripe.customers.retrieve(
-          billingInfo.stripeCustomerId,
-        );
+        const customerFromStripe =
+          await this.stripe.customers.retrieve(stripeCustomerId);
 
         if (customerFromStripe.deleted) {
-          await this.billingInfoRepository.update(
-            { userId },
-            { stripeCustomerId: undefined },
-          );
+          await this.billingsService.updateBillingInfo(userId, {
+            stripeCustomerId: undefined,
+          });
         } else {
           return customerFromStripe as Stripe.Customer;
         }
       } catch (error) {
-        if (error.type === 'StripeInvalidRequestError') {
-          await this.billingInfoRepository.update(
-            { userId },
-            { stripeCustomerId: undefined },
-          );
+        if (
+          error.code === 'resource_missing' ||
+          error.message?.includes('No such customer')
+        ) {
+          await this.billingsService.updateBillingInfo(userId, {
+            stripeCustomerId: undefined,
+          });
         } else {
           throw error;
         }
@@ -313,22 +263,26 @@ export class PaymentsService {
     }
 
     const existingStripeCustomer = await this.findExistingStripeCustomer(
-      email,
+      userEmail,
       userId,
     );
 
     if (existingStripeCustomer) {
-      await this.saveBillingInfo(userId, existingStripeCustomer.id);
+      await this.billingsService.updateBillingInfo(userId, {
+        stripeCustomerId: existingStripeCustomer.id,
+      });
       return existingStripeCustomer;
     }
 
     const customer = await this.createStripeCustomer(
-      billingInfo.fullName,
-      email,
+      fullName,
+      userEmail,
       userId,
     );
 
-    await this.saveBillingInfo(userId, customer.id);
+    await this.billingsService.updateBillingInfo(userId, {
+      stripeCustomerId: customer.id,
+    });
 
     return customer;
   }
@@ -338,15 +292,10 @@ export class PaymentsService {
     userId: string,
   ): Promise<Stripe.Customer | null> {
     try {
-      const customers = await this.stripe.customers.list({ email, limit: 1 });
+      const customer = (await this.stripe.customers.list({ email, limit: 1 }))
+        .data[0];
 
-      const customer = customers.data[0];
-
-      if (!customer) {
-        return null;
-      }
-
-      if (customer.metadata?.userId === userId) {
+      if (customer && customer.metadata?.userId === userId) {
         return customer;
       }
 
@@ -386,44 +335,34 @@ export class PaymentsService {
     }
   }
 
-  private async saveBillingInfo(
-    userId: string,
-    customerId: string,
-  ): Promise<void> {
-    try {
-      const result = await this.billingInfoRepository.update(
-        { userId },
-        { stripeCustomerId: customerId },
-      );
-
-      if (result.affected === 0) {
-        await this.billingInfoRepository.save({
-          userId,
-          stripeCustomerId: customerId,
-        });
-      }
-    } catch (error) {
-      // Don't perform a Stripe rollback if it can't register the stripeCustomerId in the local DB.
-      // The next execution of findExistingStripeCustomer will automatically synchronize it.
-      throw new InternalServerErrorException(
-        'Error while trying to save billing info',
-      );
-    }
-  }
-
-  ////
-  private async getCustomerByUserId(
+  private async findCustomerByUserId(
     userId: string,
   ): Promise<Stripe.Customer | null> {
-    // TODO: Implementar busca do customer ID no banco
-    // const user = await this.usersService.findById(userId);
-    // if (!user.stripeCustomerId) return null;
-    // return await this.stripe.customers.retrieve(user.stripeCustomerId);
+    // Try to get by existing stripeCustomerId in local DB
+    const billingInfo =
+      await this.billingsService.findBillingInfoByUserId(userId);
 
-    // Por enquanto, buscar por email (temporário)
-    const userEmail = `user-${userId}@example.com`;
+    if (billingInfo.stripeCustomerId) {
+      try {
+        const customer = await this.stripe.customers.retrieve(
+          billingInfo.stripeCustomerId,
+        );
+        return customer as Stripe.Customer;
+      } catch (error) {
+        throw new InternalServerErrorException(
+          `Error while trying to get Stripe customer: ${error.message}`,
+        );
+      }
+    }
+
+    // Gets by email if it doesn't exist in local DB
+    const user = await this.usersService.find(userId);
+    if (!user.email) {
+      return null;
+    }
+
     const customers = await this.stripe.customers.list({
-      email: userEmail,
+      email: user.email,
       limit: 1,
     });
 
@@ -439,41 +378,12 @@ export class PaymentsService {
     return priceIds[planType];
   }
 
-  // Método para ser usado pelo webhook
-  async handleSubscriptionCreated(subscription: Stripe.Subscription) {
-    const customerId = subscription.customer as string;
-    const customer = await this.stripe.customers.retrieve(customerId);
-
-    if (customer.deleted) return;
-
-    const userId = customer.metadata?.userId;
-
-    if (userId) {
-      // TODO: Registrar no billings service
-      // await this.billingsService.createSubscriptionRecord({
-      //   userId,
-      //   stripeSubscriptionId: subscription.id,
-      //   planType: 'premium',
-      //   status: subscription.status,
-      //   currentPeriodStart: new Date(subscription.current_period_start * 1000),
-      //   currentPeriodEnd: new Date(subscription.current_period_end * 1000),
-      // });
-    }
-  }
-
-  async handleSubscriptionUpdated(subscription: Stripe.Subscription) {
-    // TODO: Atualizar registro no billings service
-  }
-
-  async handleSubscriptionDeleted(subscription: Stripe.Subscription) {
-    // TODO: Marcar assinatura como cancelada no billings service
-  }
-
+  // Webhook functions
   async handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
-    // TODO: Registrar pagamento no billings service
+    // Payment logic
   }
 
   async handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
-    // TODO: Registrar falha no pagamento no billings service
+    // Payment logic
   }
 }

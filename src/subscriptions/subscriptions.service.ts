@@ -12,6 +12,7 @@ import { SubscriptionStatus } from './enums/subscription-status.enum';
 
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
+import Stripe from 'stripe';
 
 @Injectable()
 export class SubscriptionsService {
@@ -223,6 +224,9 @@ export class SubscriptionsService {
       .execute();
   }
 
+  // TODO
+  // atualizar nome para "status"
+  // precisa verificar se há inscrição ativa no stripe, via PaymentsService
   async getSubscriptionStats(userId: string) {
     const subscription = await this.findUserActiveSubscription(userId);
 
@@ -264,4 +268,13 @@ export class SubscriptionsService {
       currentPeriodEnd: newPeriodEnd,
     });
   }
+
+  // Webhook functions
+  async handleSubscriptionCreated(
+    subscription: Stripe.Subscription,
+  ): Promise<void> {}
+
+  async handleSubscriptionDeleted(
+    subscription: Stripe.Subscription,
+  ): Promise<void> {}
 }

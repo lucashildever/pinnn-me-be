@@ -13,8 +13,8 @@ import { UsersModule } from 'src/users/users.module';
 @Module({
   imports: [
     TypeOrmModule.forFeature([Payment, PaymentMethod]),
-    UsersModule,
     BillingsModule,
+    UsersModule,
   ],
   controllers: [PaymentsController],
   providers: [PaymentsService],

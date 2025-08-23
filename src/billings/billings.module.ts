@@ -12,6 +12,6 @@ import { BillingsService } from './billings.service';
   imports: [TypeOrmModule.forFeature([BillingInfo, Invoice])],
   controllers: [BillingsController],
   providers: [BillingsService],
-  exports: [TypeOrmModule],
+  exports: [TypeOrmModule, BillingsService],
 })
 export class BillingsModule {}

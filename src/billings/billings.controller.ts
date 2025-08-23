@@ -46,7 +46,7 @@ export class BillingsController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get billing info by user ID' })
   async getBillingInfo(@Param('userId') userId: string) {
-    return this.billingsService.getBillingInfoByUserId(userId);
+    return this.billingsService.findBillingInfoByUserId(userId);
   }
 
   @Put('info/:userId')
@@ -71,7 +71,7 @@ export class BillingsController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get invoice by ID' })
   async getInvoice(@Param('id') id: string) {
-    return this.billingsService.getInvoiceById(id);
+    return this.billingsService.findInvoiceById(id);
   }
 
   @Put('invoices/:id')
@@ -90,7 +90,7 @@ export class BillingsController {
     @Query('limit') limit: number = 50,
     @Query('offset') offset: number = 0,
   ) {
-    const { invoices, total } = await this.billingsService.getUserInvoices(
+    const { invoices, total } = await this.billingsService.findUserInvoices(
       userId,
       limit,
       offset,
@@ -108,7 +108,7 @@ export class BillingsController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get user billing statistics' })
   async getUserBillingStats(@Param('userId') userId: string) {
-    return this.billingsService.getUserBillingStats(userId);
+    return this.billingsService.findUserBillingStats(userId);
   }
 
   // Admin endpoints
@@ -120,7 +120,7 @@ export class BillingsController {
     @Param('status') status: InvoiceStatus,
     @Query('limit') limit: number = 50,
   ) {
-    const invoices = await this.billingsService.getInvoicesByStatus(
+    const invoices = await this.billingsService.findInvoicesByStatus(
       status,
       limit,
     );

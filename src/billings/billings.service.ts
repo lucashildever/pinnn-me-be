@@ -17,6 +17,7 @@ import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 
 import { InvoiceStatus } from './enums/invoice-status.enum';
+import Stripe from 'stripe';
 
 @Injectable()
 export class BillingsService {
@@ -50,10 +51,10 @@ export class BillingsService {
     return this.mapBillingInfoToResponse(saved);
   }
 
-  async getBillingInfoByUserId(
+  async findBillingInfoByUserId(
     userId: string,
   ): Promise<BillingInfoResponseDto> {
-    const billingInfo = await this.findBillingInfoByUserId(userId);
+    const billingInfo = await this.findBillingInfoByUserIdOrFail(userId);
     return this.mapBillingInfoToResponse(billingInfo);
   }
 
@@ -61,9 +62,12 @@ export class BillingsService {
     userId: string,
     dto: UpdateBillingInfoDto,
   ): Promise<BillingInfoResponseDto> {
-    const billingInfo = await this.findBillingInfoByUserId(userId);
+    const billingInfo = await this.findBillingInfoByUserIdOrFail(userId);
+
     Object.assign(billingInfo, dto);
+
     const updated = await this.billingInfoRepository.save(billingInfo);
+
     return this.mapBillingInfoToResponse(updated);
   }
 
@@ -72,38 +76,27 @@ export class BillingsService {
     stripeCustomerId: string,
     defaultPaymentMethodId?: string,
   ): Promise<BillingInfoResponseDto> {
-    const billingInfo = await this.findBillingInfoByUserId(userId);
+    const billingInfo = await this.findBillingInfoByUserIdOrFail(userId);
     billingInfo.stripeCustomerId = stripeCustomerId;
+
     if (defaultPaymentMethodId) {
       billingInfo.defaultPaymentMethodId = defaultPaymentMethodId;
     }
+
     const updated = await this.billingInfoRepository.save(billingInfo);
+
     return this.mapBillingInfoToResponse(updated);
   }
 
-  // Private helper for internal use
-  private async findBillingInfoByUserId(userId: string): Promise<BillingInfo> {
-    const billingInfo = await this.billingInfoRepository.findOne({
-      where: { userId },
-      relations: ['user'],
-    });
-
-    if (!billingInfo) {
-      throw new NotFoundException('Billing info not found for this user');
-    }
-
-    return billingInfo;
-  }
-
-  // Transaction methods
+  // Invoice methods
   async createInvoice(dto: CreateInvoiceDto): Promise<InvoiceResponseDto> {
     const invoice = this.invoiceRepository.create(dto);
     const saved = await this.invoiceRepository.save(invoice);
     return this.mapInvoiceToResponse(saved);
   }
 
-  async getInvoiceById(id: string): Promise<InvoiceResponseDto> {
-    const invoice = await this.findInvoiceById(id);
+  async findInvoiceById(id: string): Promise<InvoiceResponseDto> {
+    const invoice = await this.findInvoiceOrFail(id);
     return this.mapInvoiceToResponse(invoice);
   }
 
@@ -111,13 +104,14 @@ export class BillingsService {
     id: string,
     dto: UpdateInvoiceDto,
   ): Promise<InvoiceResponseDto> {
-    const invoice = await this.findInvoiceById(id);
+    const invoice = await this.findInvoiceOrFail(id);
     Object.assign(invoice, dto);
+
     const updated = await this.invoiceRepository.save(invoice);
     return this.mapInvoiceToResponse(updated);
   }
 
-  async getUserInvoices(
+  async findUserInvoices(
     userId: string,
     limit: number = 50,
     offset: number = 0,
@@ -136,7 +130,7 @@ export class BillingsService {
     };
   }
 
-  async getInvoicesByStatus(
+  async findInvoicesByStatus(
     status: InvoiceStatus,
     limit: number = 50,
   ): Promise<InvoiceResponseDto[]> {
@@ -150,23 +144,8 @@ export class BillingsService {
     return invoices.map((t) => this.mapInvoiceToResponse(t));
   }
 
-  // Private helper for internal use
-  private async findInvoiceById(id: string): Promise<Invoice> {
-    const invoice = await this.invoiceRepository.findOne({
-      where: { id },
-      relations: ['billingInfo', 'subscription'],
-    });
-
-    if (!invoice) {
-      throw new NotFoundException('invoice not found');
-    }
-
-    return invoice;
-  }
-
-  // Helper methods
-  async getUserBillingStats(userId: string) {
-    const billingInfo = await this.findBillingInfoByUserId(userId);
+  async findUserBillingStats(userId: string) {
+    const billingInfo = await this.findBillingInfoByUserIdOrFail(userId);
 
     const [totalInvoices, successfulInvoices, totalSpent] = await Promise.all([
       this.invoiceRepository.count({
@@ -199,7 +178,35 @@ export class BillingsService {
     };
   }
 
-  // Response mappers
+  // Private helpers
+  private async findInvoiceOrFail(id: string): Promise<Invoice> {
+    const invoice = await this.invoiceRepository.findOne({
+      where: { id },
+      relations: ['billingInfo', 'subscription'],
+    });
+
+    if (!invoice) {
+      throw new NotFoundException('invoice not found');
+    }
+
+    return invoice;
+  }
+
+  private async findBillingInfoByUserIdOrFail(
+    userId: string,
+  ): Promise<BillingInfo> {
+    const billingInfo = await this.billingInfoRepository.findOne({
+      where: { userId },
+      relations: ['user'],
+    });
+
+    if (!billingInfo) {
+      throw new NotFoundException('Billing info not found for this user');
+    }
+
+    return billingInfo;
+  }
+
   private mapBillingInfoToResponse(
     billingInfo: BillingInfo,
   ): BillingInfoResponseDto {
@@ -234,4 +241,11 @@ export class BillingsService {
       createdAt: invoice.createdAt,
     };
   }
+
+  // Webhook functions
+  async handleCustomerCreated(customer: Stripe.Customer): Promise<void> {}
+
+  async handleCustomerUpdated(customer: Stripe.Customer): Promise<void> {}
+
+  async handleCustomerDeleted(customer: Stripe.Customer): Promise<void> {}
 }
