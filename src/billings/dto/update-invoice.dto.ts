@@ -1,12 +1,12 @@
 import { IsDateString, IsEnum, IsOptional, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 
-import { TransactionStatus } from '../enums/transaction-status.enum';
+import { InvoiceStatus } from '../enums/invoice-status.enum';
 
-export class UpdateTransactionDto {
+export class UpdateInvoiceDto {
   @IsOptional()
-  @IsEnum(TransactionStatus)
-  status?: TransactionStatus;
+  @IsEnum(InvoiceStatus)
+  status?: InvoiceStatus;
 
   @IsOptional()
   @IsString()

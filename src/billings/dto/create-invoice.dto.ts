@@ -8,10 +8,10 @@ import {
   IsNotEmpty,
 } from 'class-validator';
 
-import { TransactionType } from '../enums/transaction-type.enum';
+import { InvoiceType } from '../enums/invoice-type.enum';
 import { PlanType } from 'src/plans/enums/plan-type.enum';
 
-export class CreateTransactionDto {
+export class CreateInvoiceDto {
   @IsUUID()
   billingInfoId: string;
 
@@ -19,8 +19,8 @@ export class CreateTransactionDto {
   @IsUUID()
   subscriptionId?: string;
 
-  @IsEnum(TransactionType)
-  type: TransactionType;
+  @IsEnum(InvoiceType)
+  type: InvoiceType;
 
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)

@@ -1,11 +1,11 @@
-import { TransactionStatus } from '../enums/transaction-status.enum';
-import { TransactionType } from '../enums/transaction-type.enum';
+import { InvoiceStatus } from '../enums/invoice-status.enum';
+import { InvoiceType } from '../enums/invoice-type.enum';
 import { PlanType } from 'src/plans/enums/plan-type.enum';
 
-export class TransactionResponseDto {
+export class InvoiceResponseDto {
   id: string;
-  type: TransactionType;
-  status: TransactionStatus;
+  type: InvoiceType;
+  status: InvoiceStatus;
   amount: number;
   currency: string;
   planName?: string;

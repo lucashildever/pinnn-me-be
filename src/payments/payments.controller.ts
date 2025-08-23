@@ -1,11 +1,22 @@
-import { Controller, Post, Get, Body, UseGuards, Req } from '@nestjs/common';
+import {
+  Req,
+  Post,
+  Get,
+  Body,
+  Query,
+  UseGuards,
+  Controller,
+} from '@nestjs/common';
+
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth-guard';
+import { AuthRequest } from 'src/common/interfaces/auth-request.interface';
 
 import { PaymentsService } from './payments.service';
 
-import { CreateCustomerPortalDto } from './dto/create-customer-portal.dto';
+import { CheckoutSessionResponseDto } from './dto/checkout-session-response.dto';
 import { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
-import { AuthRequest } from 'src/common/interfaces/auth-request.interface';
+import { CreateCustomerPortalDto } from './dto/create-customer-portal.dto';
+import { SessionStatusDto } from './dto/session-status.dto';
 
 @Controller('payments')
 export class PaymentsController {
@@ -16,14 +27,22 @@ export class PaymentsController {
   async createCheckoutSession(
     @Body() createSessionDto: CreateCheckoutSessionDto,
     @Req() req: AuthRequest,
-  ) {
-    const userId = req.user.id;
-    return this.paymentsService.createCheckoutSession(
-      userId,
+  ): Promise<CheckoutSessionResponseDto> {
+    return await this.paymentsService.createCheckoutSession(
+      req.user.id,
       createSessionDto.planType,
-      createSessionDto.successUrl,
-      createSessionDto.cancelUrl,
+      createSessionDto.period,
     );
+  }
+
+  @Get('session-status')
+  @UseGuards(JwtAuthGuard)
+  async getSessionStatus(
+    @Query('session_id') sessionId: string,
+    @Req() req: AuthRequest,
+  ): Promise<SessionStatusDto> {
+    const userId = req.user.id;
+    return this.paymentsService.findSessionStatus(sessionId, userId);
   }
 
   @Post('create-customer-portal')
@@ -31,39 +50,11 @@ export class PaymentsController {
   async createCustomerPortal(
     @Body() portalDto: CreateCustomerPortalDto,
     @Req() req: AuthRequest,
-  ) {
+  ): Promise<{ url: string }> {
     const userId = req.user.id;
     return this.paymentsService.createCustomerPortal(
       userId,
       portalDto.returnUrl,
     );
-  }
-
-  @Get('subscription-status')
-  @UseGuards(JwtAuthGuard)
-  async getSubscriptionStatus(@Req() req: AuthRequest) {
-    const userId = req.user.id;
-    return this.paymentsService.getSubscriptionStatus(userId);
-  }
-
-  @Post('cancel-subscription')
-  @UseGuards(JwtAuthGuard)
-  async cancelSubscription(@Req() req: AuthRequest) {
-    const userId = req.user.id;
-    return this.paymentsService.cancelSubscription(userId);
-  }
-
-  @Post('reactivate-subscription')
-  @UseGuards(JwtAuthGuard)
-  async reactivateSubscription(@Req() req: AuthRequest) {
-    const userId = req.user.id;
-    return this.paymentsService.reactivateSubscription(userId);
-  }
-
-  @Get('invoices')
-  @UseGuards(JwtAuthGuard)
-  async getInvoices(@Req() req: AuthRequest) {
-    const userId = req.user.id;
-    return this.paymentsService.getCustomerInvoices(userId);
   }
 }

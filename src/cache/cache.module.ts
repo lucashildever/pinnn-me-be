@@ -11,9 +11,9 @@ import { CacheController } from './cache.controller';
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
         store: redisStore,
-        host: configService.get('REDIS_HOST', 'localhost'),
-        port: configService.get('REDIS_PORT', 6379),
-        ttl: configService.get('REDIS_TTL', 60),
+        host: configService.get<string>('redis.host'),
+        port: configService.get<number>('redis.port'),
+        ttl: configService.get<number>('redis.ttl'),
       }),
       inject: [ConfigService],
     }),

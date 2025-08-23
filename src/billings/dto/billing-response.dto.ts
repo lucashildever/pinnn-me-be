@@ -10,6 +10,7 @@ export class BillingInfoResponseDto {
   currency: string;
   taxId?: string;
   hasStripeCustomer: boolean;
+  stripeCustomerId?: string;
   hasDefaultPaymentMethod: boolean;
   updatedAt: Date; // useful for ordering
 }

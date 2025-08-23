@@ -21,7 +21,7 @@ import { SuperAdminGuard } from './guards/super-admin.guard';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET'),
+        secret: configService.get<string>('jwt.secret'),
         signOptions: { expiresIn: '24h' },
       }),
       inject: [ConfigService],

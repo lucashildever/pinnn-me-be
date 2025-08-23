@@ -26,6 +26,9 @@ export default () => {
       pass: process.env.DB_PASS,
       user: process.env.DB_USER,
     },
+    jwt: {
+      secret: process.env.JWT_SECRET,
+    },
     redis: {
       host: process.env.REDIS_HOST ?? 'localhost',
       port: parseInt(process.env.REDIS_PORT ?? '6379', 10),
@@ -34,6 +37,15 @@ export default () => {
     stripe: {
       secretKey: process.env.STRIPE_SECRET_KEY,
       webhookKey: process.env.STRIPE_WEBHOOK_SECRET,
+      prices: {
+        pro: {
+          monthly: process.env.STRIPE_PRO_MONTHLY_PRICE_ID,
+          yearly: process.env.STRIPE_PRO_YEARLY_PRICE_ID,
+        },
+        // other plan prices comes here
+        // e.g.
+        // premium: {...}
+      },
     },
   };
 };

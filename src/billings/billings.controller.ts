@@ -16,15 +16,15 @@ import { BillingsService } from './billings.service';
 
 import { UpdateBillingInfoDto } from './dto/update-billing-info.dto';
 import { CreateBillingInfoDto } from './dto/create-billing-info.dto';
-import { UpdateTransactionDto } from './dto/update-transaction.dto';
-import { CreateTransactionDto } from './dto/create-transaction.dto';
+import { UpdateInvoiceDto } from './dto/update-invoice.dto';
+import { CreateInvoiceDto } from './dto/create-invoice.dto';
 
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth-guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { Role } from 'src/auth/enums/role.enum';
 
-import { TransactionStatus } from './enums/transaction-status.enum';
+import { InvoiceStatus } from './enums/invoice-status.enum';
 
 @ApiTags('Billings')
 @Controller('billings')
@@ -46,7 +46,7 @@ export class BillingsController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get billing info by user ID' })
   async getBillingInfo(@Param('userId') userId: string) {
-    return this.billingsService.getBillingInfoByUserId(userId);
+    return this.billingsService.findBillingInfoByUserId(userId);
   }
 
   @Put('info/:userId')
@@ -59,45 +59,45 @@ export class BillingsController {
     return this.billingsService.updateBillingInfo(userId, dto);
   }
 
-  // Transaction endpoints
-  @Post('transactions')
+  // Invoices endpoints
+  @Post('invoices')
   @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Create transaction' })
-  async createTransaction(@Body() dto: CreateTransactionDto) {
-    return this.billingsService.createTransaction(dto);
+  @ApiOperation({ summary: 'Create invoice' })
+  async createInvoice(@Body() dto: CreateInvoiceDto) {
+    return this.billingsService.createInvoice(dto);
   }
 
-  @Get('transactions/:id')
+  @Get('invoices/:id')
   @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Get transaction by ID' })
-  async getTransaction(@Param('id') id: string) {
-    return this.billingsService.getTransactionById(id);
+  @ApiOperation({ summary: 'Get invoice by ID' })
+  async getInvoice(@Param('id') id: string) {
+    return this.billingsService.findInvoiceById(id);
   }
 
-  @Put('transactions/:id')
+  @Put('invoices/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.SUPER_ADMIN)
-  @ApiOperation({ summary: 'Update transaction status' })
-  async updateTransaction(
-    @Param('id') id: string,
-    @Body() dto: UpdateTransactionDto,
-  ) {
-    return this.billingsService.updateTransaction(id, dto);
+  @ApiOperation({ summary: 'Update invoice status' })
+  async updateInvoice(@Param('id') id: string, @Body() dto: UpdateInvoiceDto) {
+    return this.billingsService.updateInvoice(id, dto);
   }
 
-  @Get('users/:userId/transactions')
+  @Get('users/:userId/invoices')
   @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Get user transaction history' })
-  async getUserTransactions(
+  @ApiOperation({ summary: 'Get user invoice history' })
+  async getUserInvoices(
     @Param('userId') userId: string,
     @Query('limit') limit: number = 50,
     @Query('offset') offset: number = 0,
   ) {
-    const { transactions, total } =
-      await this.billingsService.getUserTransactions(userId, limit, offset);
+    const { invoices, total } = await this.billingsService.findUserInvoices(
+      userId,
+      limit,
+      offset,
+    );
 
     return {
-      data: transactions,
+      data: invoices,
       total,
       limit,
       offset,
@@ -108,26 +108,26 @@ export class BillingsController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get user billing statistics' })
   async getUserBillingStats(@Param('userId') userId: string) {
-    return this.billingsService.getUserBillingStats(userId);
+    return this.billingsService.findUserBillingStats(userId);
   }
 
   // Admin endpoints
-  @Get('transactions/status/:status')
+  @Get('invoices/status/:status')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.SUPER_ADMIN)
-  @ApiOperation({ summary: 'Get transactions by status (admin)' })
-  async getTransactionsByStatus(
-    @Param('status') status: TransactionStatus,
+  @ApiOperation({ summary: 'Get invoices by status (admin)' })
+  async getInvoicesByStatus(
+    @Param('status') status: InvoiceStatus,
     @Query('limit') limit: number = 50,
   ) {
-    const transactions = await this.billingsService.getTransactionsByStatus(
+    const invoices = await this.billingsService.findInvoicesByStatus(
       status,
       limit,
     );
 
     return {
-      data: transactions,
-      total: transactions.length,
+      data: invoices,
+      total: invoices.length,
     };
   }
 }

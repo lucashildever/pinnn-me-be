@@ -7,23 +7,25 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { BillingInfo } from './entities/billing-info.entity';
-import { Transaction } from './entities/transaction.entity';
+import { Invoice } from './entities/invoice.entity';
 
 import { BillingInfoResponseDto } from './dto/billing-response.dto';
-import { TransactionResponseDto } from './dto/transaction-response.dto';
+import { InvoiceResponseDto } from './dto/invoice-response.dto';
 import { UpdateBillingInfoDto } from './dto/update-billing-info.dto';
 import { CreateBillingInfoDto } from './dto/create-billing-info.dto';
-import { CreateTransactionDto } from './dto/create-transaction.dto';
-import { UpdateTransactionDto } from './dto/update-transaction.dto';
-import { TransactionStatus } from './enums/transaction-status.enum';
+import { CreateInvoiceDto } from './dto/create-invoice.dto';
+import { UpdateInvoiceDto } from './dto/update-invoice.dto';
+
+import { InvoiceStatus } from './enums/invoice-status.enum';
+import Stripe from 'stripe';
 
 @Injectable()
 export class BillingsService {
   constructor(
     @InjectRepository(BillingInfo)
     private readonly billingInfoRepository: Repository<BillingInfo>,
-    @InjectRepository(Transaction)
-    private readonly transactionRepository: Repository<Transaction>,
+    @InjectRepository(Invoice)
+    private readonly invoiceRepository: Repository<Invoice>,
   ) {}
 
   async createBillingInfo(
@@ -49,10 +51,10 @@ export class BillingsService {
     return this.mapBillingInfoToResponse(saved);
   }
 
-  async getBillingInfoByUserId(
+  async findBillingInfoByUserId(
     userId: string,
   ): Promise<BillingInfoResponseDto> {
-    const billingInfo = await this.findBillingInfoByUserId(userId);
+    const billingInfo = await this.findBillingInfoByUserIdOrFail(userId);
     return this.mapBillingInfoToResponse(billingInfo);
   }
 
@@ -60,9 +62,12 @@ export class BillingsService {
     userId: string,
     dto: UpdateBillingInfoDto,
   ): Promise<BillingInfoResponseDto> {
-    const billingInfo = await this.findBillingInfoByUserId(userId);
+    const billingInfo = await this.findBillingInfoByUserIdOrFail(userId);
+
     Object.assign(billingInfo, dto);
+
     const updated = await this.billingInfoRepository.save(billingInfo);
+
     return this.mapBillingInfoToResponse(updated);
   }
 
@@ -71,17 +76,125 @@ export class BillingsService {
     stripeCustomerId: string,
     defaultPaymentMethodId?: string,
   ): Promise<BillingInfoResponseDto> {
-    const billingInfo = await this.findBillingInfoByUserId(userId);
+    const billingInfo = await this.findBillingInfoByUserIdOrFail(userId);
     billingInfo.stripeCustomerId = stripeCustomerId;
+
     if (defaultPaymentMethodId) {
       billingInfo.defaultPaymentMethodId = defaultPaymentMethodId;
     }
+
     const updated = await this.billingInfoRepository.save(billingInfo);
+
     return this.mapBillingInfoToResponse(updated);
   }
 
-  // Private helper for internal use
-  private async findBillingInfoByUserId(userId: string): Promise<BillingInfo> {
+  // Invoice methods
+  async createInvoice(dto: CreateInvoiceDto): Promise<InvoiceResponseDto> {
+    const invoice = this.invoiceRepository.create(dto);
+    const saved = await this.invoiceRepository.save(invoice);
+    return this.mapInvoiceToResponse(saved);
+  }
+
+  async findInvoiceById(id: string): Promise<InvoiceResponseDto> {
+    const invoice = await this.findInvoiceOrFail(id);
+    return this.mapInvoiceToResponse(invoice);
+  }
+
+  async updateInvoice(
+    id: string,
+    dto: UpdateInvoiceDto,
+  ): Promise<InvoiceResponseDto> {
+    const invoice = await this.findInvoiceOrFail(id);
+    Object.assign(invoice, dto);
+
+    const updated = await this.invoiceRepository.save(invoice);
+    return this.mapInvoiceToResponse(updated);
+  }
+
+  async findUserInvoices(
+    userId: string,
+    limit: number = 50,
+    offset: number = 0,
+  ): Promise<{ invoices: InvoiceResponseDto[]; total: number }> {
+    const [invoices, total] = await this.invoiceRepository.findAndCount({
+      where: { billingInfo: { userId } },
+      relations: ['subscription'],
+      order: { createdAt: 'DESC' },
+      take: limit,
+      skip: offset,
+    });
+
+    return {
+      invoices: invoices.map((t) => this.mapInvoiceToResponse(t)),
+      total,
+    };
+  }
+
+  async findInvoicesByStatus(
+    status: InvoiceStatus,
+    limit: number = 50,
+  ): Promise<InvoiceResponseDto[]> {
+    const invoices = await this.invoiceRepository.find({
+      where: { status },
+      relations: ['billingInfo', 'subscription'],
+      order: { createdAt: 'DESC' },
+      take: limit,
+    });
+
+    return invoices.map((t) => this.mapInvoiceToResponse(t));
+  }
+
+  async findUserBillingStats(userId: string) {
+    const billingInfo = await this.findBillingInfoByUserIdOrFail(userId);
+
+    const [totalInvoices, successfulInvoices, totalSpent] = await Promise.all([
+      this.invoiceRepository.count({
+        where: { billingInfoId: billingInfo.id },
+      }),
+      this.invoiceRepository.count({
+        where: {
+          billingInfoId: billingInfo.id,
+          status: InvoiceStatus.COMPLETED,
+        },
+      }),
+      this.invoiceRepository
+        .createQueryBuilder('transaction')
+        .select('SUM(transaction.amount)', 'total')
+        .where('transaction.billingInfoId = :billingInfoId', {
+          billingInfoId: billingInfo.id,
+        })
+        .andWhere('transaction.status = :status', {
+          status: InvoiceStatus.COMPLETED,
+        })
+        .getRawOne(),
+    ]);
+
+    return {
+      totalInvoices,
+      successfulInvoices,
+      failedInvoices: totalInvoices - successfulInvoices,
+      totalSpent: parseFloat(totalSpent?.total || '0'),
+      currency: billingInfo.currency,
+    };
+  }
+
+  // Private helpers
+  private async findInvoiceOrFail(id: string): Promise<Invoice> {
+    const invoice = await this.invoiceRepository.findOne({
+      where: { id },
+      relations: ['billingInfo', 'subscription'],
+    });
+
+    if (!invoice) {
+      throw new NotFoundException('invoice not found');
+    }
+
+    return invoice;
+  }
+
+  private async findBillingInfoByUserIdOrFail(
+    userId: string,
+  ): Promise<BillingInfo> {
     const billingInfo = await this.billingInfoRepository.findOne({
       where: { userId },
       relations: ['user'],
@@ -94,116 +207,6 @@ export class BillingsService {
     return billingInfo;
   }
 
-  // Transaction methods
-  async createTransaction(
-    dto: CreateTransactionDto,
-  ): Promise<TransactionResponseDto> {
-    const transaction = this.transactionRepository.create(dto);
-    const saved = await this.transactionRepository.save(transaction);
-    return this.mapTransactionToResponse(saved);
-  }
-
-  async getTransactionById(id: string): Promise<TransactionResponseDto> {
-    const transaction = await this.findTransactionById(id);
-    return this.mapTransactionToResponse(transaction);
-  }
-
-  async updateTransaction(
-    id: string,
-    dto: UpdateTransactionDto,
-  ): Promise<TransactionResponseDto> {
-    const transaction = await this.findTransactionById(id);
-    Object.assign(transaction, dto);
-    const updated = await this.transactionRepository.save(transaction);
-    return this.mapTransactionToResponse(updated);
-  }
-
-  async getUserTransactions(
-    userId: string,
-    limit: number = 50,
-    offset: number = 0,
-  ): Promise<{ transactions: TransactionResponseDto[]; total: number }> {
-    const [transactions, total] = await this.transactionRepository.findAndCount(
-      {
-        where: { billingInfo: { userId } },
-        relations: ['subscription'],
-        order: { createdAt: 'DESC' },
-        take: limit,
-        skip: offset,
-      },
-    );
-
-    return {
-      transactions: transactions.map((t) => this.mapTransactionToResponse(t)),
-      total,
-    };
-  }
-
-  async getTransactionsByStatus(
-    status: TransactionStatus,
-    limit: number = 50,
-  ): Promise<TransactionResponseDto[]> {
-    const transactions = await this.transactionRepository.find({
-      where: { status },
-      relations: ['billingInfo', 'subscription'],
-      order: { createdAt: 'DESC' },
-      take: limit,
-    });
-
-    return transactions.map((t) => this.mapTransactionToResponse(t));
-  }
-
-  // Private helper for internal use
-  private async findTransactionById(id: string): Promise<Transaction> {
-    const transaction = await this.transactionRepository.findOne({
-      where: { id },
-      relations: ['billingInfo', 'subscription'],
-    });
-
-    if (!transaction) {
-      throw new NotFoundException('Transaction not found');
-    }
-
-    return transaction;
-  }
-
-  // Helper methods
-  async getUserBillingStats(userId: string) {
-    const billingInfo = await this.findBillingInfoByUserId(userId);
-
-    const [totalTransactions, successfulTransactions, totalSpent] =
-      await Promise.all([
-        this.transactionRepository.count({
-          where: { billingInfoId: billingInfo.id },
-        }),
-        this.transactionRepository.count({
-          where: {
-            billingInfoId: billingInfo.id,
-            status: TransactionStatus.COMPLETED,
-          },
-        }),
-        this.transactionRepository
-          .createQueryBuilder('transaction')
-          .select('SUM(transaction.amount)', 'total')
-          .where('transaction.billingInfoId = :billingInfoId', {
-            billingInfoId: billingInfo.id,
-          })
-          .andWhere('transaction.status = :status', {
-            status: TransactionStatus.COMPLETED,
-          })
-          .getRawOne(),
-      ]);
-
-    return {
-      totalTransactions,
-      successfulTransactions,
-      failedTransactions: totalTransactions - successfulTransactions,
-      totalSpent: parseFloat(totalSpent?.total || '0'),
-      currency: billingInfo.currency,
-    };
-  }
-
-  // Response mappers
   private mapBillingInfoToResponse(
     billingInfo: BillingInfo,
   ): BillingInfoResponseDto {
@@ -224,21 +227,25 @@ export class BillingsService {
     };
   }
 
-  private mapTransactionToResponse(
-    transaction: Transaction,
-  ): TransactionResponseDto {
+  private mapInvoiceToResponse(invoice: Invoice): InvoiceResponseDto {
     return {
-      id: transaction.id,
-      type: transaction.type,
-      status: transaction.status,
-      amount: parseFloat(transaction.amount.toString()),
-      currency: transaction.currency,
-      planName: transaction.planName,
-      planType: transaction.planType,
-      description: transaction.description,
-      processedAt: transaction.processedAt,
-      createdAt: transaction.createdAt,
-      stripePaymentIntentId: transaction.stripePaymentIntentId,
+      id: invoice.id,
+      type: invoice.type,
+      status: invoice.status,
+      amount: parseFloat(invoice.amount.toString()),
+      currency: invoice.currency,
+      planName: invoice.planName,
+      planType: invoice.planType,
+      description: invoice.description,
+      processedAt: invoice.processedAt,
+      createdAt: invoice.createdAt,
     };
   }
+
+  // Webhook functions
+  async handleCustomerCreated(customer: Stripe.Customer): Promise<void> {}
+
+  async handleCustomerUpdated(customer: Stripe.Customer): Promise<void> {}
+
+  async handleCustomerDeleted(customer: Stripe.Customer): Promise<void> {}
 }

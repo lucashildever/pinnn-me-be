@@ -7,8 +7,10 @@ import {
 } from 'typeorm';
 
 import { TimestampEntity } from 'src/common/entities/timestamp.entity';
+import { PaymentMethod } from 'src/payments/entities/payment-method.entity';
 import { Subscription } from 'src/subscriptions/entities/subscription.entity';
 import { MuralEntity } from 'src/murals/entities/mural.entity';
+import { Invoice } from 'src/billings/entities/invoice.entity';
 
 import { Status } from 'src/common/enums/status.enum';
 import { Role } from '../../auth/enums/role.enum';
@@ -23,6 +25,12 @@ export class UserEntity extends TimestampEntity {
 
   @OneToMany(() => Subscription, (subscription) => subscription.user)
   subscriptions?: Subscription[];
+
+  @OneToMany(() => PaymentMethod, (pm) => pm.user)
+  paymentMethods: PaymentMethod[];
+
+  @OneToMany(() => Invoice, (invoice) => invoice.user)
+  invoices: Invoice[];
 
   @Column({
     type: 'varchar',
