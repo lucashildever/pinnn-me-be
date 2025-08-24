@@ -4,11 +4,12 @@ import { Module } from '@nestjs/common';
 import { PaymentMethod } from './entities/payment-method.entity';
 import { Payment } from './entities/payment.entity';
 
-import { PaymentsController } from './payments.controller';
-import { PaymentsService } from './payments.service';
-
 import { BillingsModule } from 'src/billings/billings.module';
 import { UsersModule } from 'src/users/users.module';
+
+import { PaymentsController } from './payments.controller';
+import { PaymentsService } from './payments.service';
+import { StripeProvider } from './providers/stripe.provider';
 
 @Module({
   imports: [
@@ -17,7 +18,7 @@ import { UsersModule } from 'src/users/users.module';
     UsersModule,
   ],
   controllers: [PaymentsController],
-  providers: [PaymentsService],
-  exports: [PaymentsService],
+  providers: [PaymentsService, StripeProvider],
+  exports: [PaymentsService, StripeProvider],
 })
 export class PaymentsModule {}

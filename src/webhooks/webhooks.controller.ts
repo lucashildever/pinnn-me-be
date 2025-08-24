@@ -20,19 +20,20 @@ export class WebhooksController {
     @Headers('stripe-signature') signature: string,
     @Req() req: RawBodyRequest<Request>,
   ) {
-    try {
-      if (!signature) {
-        throw new BadRequestException('Stripe signature header missing');
-      }
+    if (!signature) {
+      throw new BadRequestException('Missing stripe-signature header');
+    }
 
-      const result = await this.webhooksService.handleStripeWebhook(
+    try {
+      await this.webhooksService.handleStripeWebhook(
         req.rawBody || Buffer.from(JSON.stringify(body)),
         signature,
       );
 
-      return result;
+      return { received: true };
     } catch (error) {
-      throw new BadRequestException(`Webhook error: ${error.message}`);
+      console.error('Webhook processing failed:', error);
+      throw new BadRequestException('Webhook processing failed');
     }
   }
 }

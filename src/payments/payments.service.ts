@@ -1,52 +1,34 @@
 import {
+  Inject,
   Injectable,
   NotFoundException,
   BadRequestException,
   UnauthorizedException,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
-import { Repository } from 'typeorm';
-
-import { BillingInfo } from 'src/billings/entities/billing-info.entity';
 
 import { PaymentPeriod } from './enums/payment-period.enum';
-
-import { CheckoutSessionResponseDto } from './dto/checkout-session-response.dto';
 
 import { BillingsService } from 'src/billings/billings.service';
 import { UsersService } from 'src/users/users.service';
 
 import { ReactivateStripeSubscriptionResponseDto } from './dto/reactivate-stripe-subscription-response.dto';
+import { CheckoutSessionResponseDto } from './dto/checkout-session-response.dto';
 import { SessionStatusDto } from './dto/session-status.dto';
+import { StripeInvoiceDto } from './dto/stripe-invoice.dto';
 
 import Stripe from 'stripe';
-import { StripeInvoiceDto } from './dto/stripe-invoice.dto';
 
 @Injectable()
 export class PaymentsService {
-  private stripe: Stripe;
-
   constructor(
-    private configService: ConfigService,
-
-    @InjectRepository(BillingInfo)
-    private readonly billingInfoRepository: Repository<BillingInfo>,
-
+    private readonly configService: ConfigService,
     private readonly billingsService: BillingsService,
     private readonly usersService: UsersService,
-  ) {
-    const stripeSecretKey = this.configService.get<string>('stripe.secretKey');
 
-    if (!stripeSecretKey) {
-      throw new Error(
-        'STRIPE_SECRET_KEY is required but not defined in environment variables',
-      );
-    }
-
-    this.stripe = new Stripe(stripeSecretKey);
-  }
+    @Inject('STRIPE') private stripe: Stripe,
+  ) {}
 
   async createCheckoutSession(
     userId: string,

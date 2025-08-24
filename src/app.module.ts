@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
-
-import configuration from 'config/configuration';
-
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+
+import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
+import configuration from 'config/configuration';
 
 import { PinsModule } from './pins/pins.module';
 import { AuthModule } from './auth/auth.module';
@@ -19,8 +19,6 @@ import { BillingsModule } from './billings/billings.module';
 import { CollectionsModule } from './collections/collections.module';
 import { CredentialsModule } from './credentials/credentials.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
-
-import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
 
 @Module({
   imports: [
