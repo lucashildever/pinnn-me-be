@@ -1,12 +1,13 @@
 import {
   Entity,
   Column,
-  OneToMany,
   ManyToOne,
+  OneToMany,
   PrimaryGeneratedColumn,
 } from 'typeorm';
 
 import { TimestampEntity } from 'src/common/entities/timestamp.entity';
+import { PaymentAttempt } from './payment-attempt.entity';
 import { UserEntity } from 'src/users/entities/user.entity';
 import { Payment } from './payment.entity';
 
@@ -19,11 +20,15 @@ export class PaymentMethod extends TimestampEntity {
 
   @ManyToOne(() => UserEntity, (user) => user.paymentMethods, {
     nullable: false,
+    onDelete: 'CASCADE',
   })
   user: UserEntity;
 
   @OneToMany(() => Payment, (payment) => payment.paymentMethod)
   payments: Payment[];
+
+  @OneToMany(() => PaymentAttempt, (attempt) => attempt.paymentMethod)
+  attempts: PaymentAttempt[];
 
   @Column({ type: 'enum', enum: PaymentMethodType })
   type: PaymentMethodType;
@@ -31,12 +36,15 @@ export class PaymentMethod extends TimestampEntity {
   @Column({ default: false })
   isDefault: boolean;
 
-  @Column({ nullable: false })
-  stripePaymentMethodId: string; // (pm_xxx)
+  @Column({ nullable: false, unique: true })
+  stripePaymentMethodId: string;
 
   @Column({ nullable: true })
   last4?: string; // when it uses card as payment method
 
   @Column({ nullable: true })
   brand?: string; // ex: visa, mastercard
+
+  @Column({ type: 'json', nullable: true })
+  metadata?: Record<string, any>;
 }

@@ -8,6 +8,7 @@ import {
 } from 'typeorm';
 
 import { TimestampEntity } from 'src/common/entities/timestamp.entity';
+import { PaymentAttempt } from 'src/payments/entities/payment-attempt.entity';
 import { Subscription } from 'src/subscriptions/entities/subscription.entity';
 import { BillingInfo } from './billing-info.entity';
 import { UserEntity } from 'src/users/entities/user.entity';
@@ -27,6 +28,9 @@ export class Invoice extends TimestampEntity {
 
   @OneToMany(() => Payment, (payment) => payment.invoice)
   payments: Payment[];
+
+  @OneToMany(() => PaymentAttempt, (attempt) => attempt.invoice)
+  paymentAttempts: PaymentAttempt[];
 
   @ManyToOne(() => BillingInfo, (billingInfo) => billingInfo.invoices)
   @JoinColumn({ name: 'billingInfoId' })
@@ -57,7 +61,7 @@ export class Invoice extends TimestampEntity {
 
   // Values
   @Column({ type: 'decimal', precision: 10, scale: 2 })
-  amount: number; // Amount in the moment of registration (ex: of user have a 15% discount)
+  amount: number; // Amount in the moment of registration (ex: if user have a 15% discount)
 
   @Column({ default: 'BRL' })
   currency: string;
