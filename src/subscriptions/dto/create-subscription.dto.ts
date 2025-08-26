@@ -1,6 +1,5 @@
 import {
   IsUUID,
-  IsObject,
   IsString,
   MaxLength,
   IsOptional,
@@ -12,8 +11,8 @@ export class CreateSubscriptionDto {
   @IsUUID(4)
   userId: string;
 
-  @IsUUID(4)
-  planId: string;
+  @IsString()
+  planName: string;
 
   @IsOptional()
   @IsDateString()

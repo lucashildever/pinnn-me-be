@@ -19,6 +19,10 @@ import { SessionStatusDto } from './dto/session-status.dto';
 import { StripeInvoiceDto } from './dto/stripe-invoice.dto';
 
 import Stripe from 'stripe';
+import { InjectRepository } from '@nestjs/typeorm';
+import { PaymentAttempt } from './entities/payment-attempt.entity';
+import { Repository } from 'typeorm';
+import { PaymentAttemptStatus } from './enums/payment-attempt-status.enum';
 
 @Injectable()
 export class PaymentsService {
@@ -26,6 +30,9 @@ export class PaymentsService {
     private readonly configService: ConfigService,
     private readonly billingsService: BillingsService,
     private readonly usersService: UsersService,
+
+    @InjectRepository(PaymentAttempt)
+    private readonly paymentAttemptRepository: Repository<PaymentAttempt>,
 
     @Inject('STRIPE') private stripe: Stripe,
   ) {}
@@ -206,6 +213,16 @@ export class PaymentsService {
     }
   }
 
+  async updatePaymentAttemptStatus(
+    sessionId: string,
+    newStatus: PaymentAttemptStatus,
+  ) {
+    return this.paymentAttemptRepository.update(
+      { stripeSessionId: sessionId },
+      { status: newStatus },
+    );
+  }
+
   // Private helpers
   private async findOrCreateStripeCustomer(
     userId: string,
@@ -358,14 +375,5 @@ export class PaymentsService {
     };
 
     return priceIds[planType];
-  }
-
-  // Webhook functions
-  async handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
-    // Payment logic
-  }
-
-  async handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
-    // Payment logic
   }
 }

@@ -35,7 +35,9 @@ export class Subscription extends TimestampEntity {
   @Column({
     type: 'enum',
     enum: SubscriptionStatus,
-    default: SubscriptionStatus.INCOMPLETE,
+    // subscription registration created only when
+    // the user paid, so it goes straight to active
+    default: SubscriptionStatus.ACTIVE,
   })
   status: SubscriptionStatus;
 

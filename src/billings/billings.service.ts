@@ -58,6 +58,22 @@ export class BillingsService {
     return this.mapBillingInfoToResponse(billingInfo);
   }
 
+  async findBillingInfoByCustomerId(
+    stripeCustomerId: string,
+  ): Promise<BillingInfo> {
+    const billingInfo = await this.billingInfoRepository.findOne({
+      where: { stripeCustomerId },
+    });
+
+    if (!billingInfo) {
+      throw new Error(
+        `BillingInfo não encontrado para customer ${stripeCustomerId}`,
+      );
+    }
+
+    return billingInfo;
+  }
+
   async updateBillingInfo(
     userId: string,
     dto: UpdateBillingInfoDto,
@@ -241,11 +257,4 @@ export class BillingsService {
       createdAt: invoice.createdAt,
     };
   }
-
-  // Webhook functions
-  async handleCustomerCreated(customer: Stripe.Customer): Promise<void> {}
-
-  async handleCustomerUpdated(customer: Stripe.Customer): Promise<void> {}
-
-  async handleCustomerDeleted(customer: Stripe.Customer): Promise<void> {}
 }

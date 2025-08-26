@@ -26,7 +26,7 @@ export class SubscriptionsController {
   @Post('create')
   @HttpCode(HttpStatus.CREATED)
   async createSubscription(@Body() createDto: CreateSubscriptionDto) {
-    return await this.subscriptionsService.createSubscription(createDto);
+    return await this.subscriptionsService.subscribe(createDto);
   }
 
   @Get('user/:userId')
@@ -47,7 +47,7 @@ export class SubscriptionsController {
   @Get('user/:userId/access/pro')
   async checkProAccess(@Param('userId') userId: string) {
     const hasProAccess = await this.subscriptionsService.hasProAccess(userId);
-    const planType = await this.subscriptionsService.getUserPlanType(userId);
+    const planType = await this.subscriptionsService.findUserPlanType(userId);
 
     return {
       hasProAccess,
@@ -123,7 +123,7 @@ export class SubscriptionsController {
   @Get('expiring/check')
   async getExpiringSubscriptions(@Query('days') days?: string) {
     const daysNumber = days ? parseInt(days, 10) : 7;
-    return await this.subscriptionsService.getSubscriptionsExpiringSoon(
+    return await this.subscriptionsService.findSubscriptionsExpiringSoon(
       daysNumber,
     );
   }

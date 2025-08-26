@@ -12,41 +12,37 @@ import { SubscriptionStatus } from './enums/subscription-status.enum';
 
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
+
+import { PlansService } from 'src/plans/plans.service';
+
 import Stripe from 'stripe';
 
 @Injectable()
 export class SubscriptionsService {
   constructor(
     @InjectRepository(Subscription)
-    private subscriptionsRepository: Repository<Subscription>,
+    private readonly subscriptionsRepository: Repository<Subscription>,
+
+    private readonly plansService: PlansService,
   ) {}
 
-  async createSubscription(
-    createDto: CreateSubscriptionDto,
-  ): Promise<Subscription> {
+  async subscribe(createDto: CreateSubscriptionDto): Promise<Subscription> {
     await this.cancelUserActiveSubscriptions(createDto.userId);
+
+    const planId = (
+      await this.plansService.findPlanByName(createDto.planName, true)
+    ).id;
 
     const subscription = this.subscriptionsRepository.create({
       userId: createDto.userId,
-      planId: createDto.planId,
-      status: SubscriptionStatus.INCOMPLETE,
+      planId: planId,
+      status: SubscriptionStatus.ACTIVE,
       startAt: createDto.startAt || new Date(),
-      currentPeriodEnd:
-        createDto.currentPeriodEnd || this.calculatePeriodEnd(createDto.planId),
+      currentPeriodEnd: createDto.currentPeriodEnd,
       billingProviderId: createDto.billingProviderId,
     });
 
     return this.subscriptionsRepository.save(subscription);
-  }
-
-  // Método helper para calcular fim do período baseado no plano
-  private calculatePeriodEnd(planId: string): Date {
-    // Buscar o plano para pegar a duração (monthly, yearly, etc)
-    // Por enquanto, assumindo mensal como padrão
-    const now = new Date();
-    const periodEnd = new Date(now);
-    periodEnd.setMonth(now.getMonth() + 1);
-    return periodEnd;
   }
 
   async findUserActiveSubscription(
@@ -60,7 +56,6 @@ export class SubscriptionsService {
     return this.subscriptionsRepository
       .createQueryBuilder('subscription')
       .leftJoinAndSelect('subscription.plan', 'plan')
-      .leftJoinAndSelect('plan.prices', 'prices')
       .leftJoinAndSelect('subscription.user', 'user')
       .where('subscription.userId = :userId', { userId })
       .andWhere('subscription.status IN (:...activeStatuses)', {
@@ -74,7 +69,6 @@ export class SubscriptionsService {
     return this.subscriptionsRepository
       .createQueryBuilder('subscription')
       .leftJoinAndSelect('subscription.plan', 'plan')
-      .leftJoinAndSelect('plan.prices', 'prices')
       .leftJoinAndSelect('subscription.user', 'user')
       .where('subscription.userId = :userId', { userId })
       .orderBy('subscription.createdAt', 'DESC')
@@ -155,7 +149,7 @@ export class SubscriptionsService {
     return !!subscription.hasValidAccess() && !!subscription.isPro();
   }
 
-  async getUserPlanType(userId: string): Promise<string> {
+  async findUserPlanType(userId: string): Promise<string> {
     const subscription = await this.findUserActiveSubscription(userId);
 
     if (!subscription || !subscription.hasValidAccess()) {
@@ -173,7 +167,7 @@ export class SubscriptionsService {
     }
   }
 
-  async getSubscriptionsExpiringSoon(
+  async findSubscriptionsExpiringSoon(
     days: number = 7,
   ): Promise<Subscription[]> {
     const futureDate = new Date();
@@ -268,13 +262,4 @@ export class SubscriptionsService {
       currentPeriodEnd: newPeriodEnd,
     });
   }
-
-  // Webhook functions
-  async handleSubscriptionCreated(
-    subscription: Stripe.Subscription,
-  ): Promise<void> {}
-
-  async handleSubscriptionDeleted(
-    subscription: Stripe.Subscription,
-  ): Promise<void> {}
 }

@@ -1,6 +1,7 @@
 export enum PaymentAttemptStatus {
-  PENDING = 'PENDING',
-  SUCCEEDED = 'SUCCEEDED',
-  FAILED = 'FAILED',
-  CANCELLED = 'CANCELLED',
+  PENDING = 'pending', // Session created, awaiting payment
+  PROCESSING = 'processing', // Checkout completed, payment processing
+  SUCCEEDED = 'succeeded', // Payment confirmed
+  FAILED = 'failed', // Payment failed
+  CANCELLED = 'cancelled', // Session cancelled/expired
 }

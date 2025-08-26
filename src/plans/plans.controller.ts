@@ -73,14 +73,14 @@ export class PlansController {
   })
   @ApiResponse({ status: 404, description: 'Plan not found' })
   async getPlanById(@Param('id') id: string): Promise<PlanResponseDto> {
-    return await this.plansService.findPlanById(id, false);
+    return await this.plansService.findByIdOrFail(id, false);
   }
 
-  @Get('slug/:slug')
+  @Get('name/:name')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.SUPER_ADMIN)
-  @ApiOperation({ summary: 'Get plan by slug (Admin access)' })
-  @ApiParam({ name: 'slug', description: 'Plan slug' })
+  @ApiOperation({ summary: 'Get plan by name (Admin access)' })
+  @ApiParam({ name: 'name', description: 'Plan name' })
   @ApiResponse({
     status: 200,
     description: 'Plan retrieved successfully',
@@ -92,8 +92,8 @@ export class PlansController {
     description: 'Forbidden - Admin access required',
   })
   @ApiResponse({ status: 404, description: 'Plan not found' })
-  async getPlanBySlug(@Param('slug') slug: string): Promise<PlanResponseDto> {
-    return await this.plansService.findPlanBySlug(slug, false);
+  async getPlanByName(@Param('name') name: string): Promise<PlanResponseDto> {
+    return await this.plansService.findPlanByName(name, false);
   }
 }
 
@@ -122,9 +122,9 @@ export class PublicPlanController {
     type: PlanResponseDto,
   })
   @ApiResponse({ status: 404, description: 'Plan not found' })
-  async getPublicPlanBySlug(
-    @Param('slug') slug: string,
+  async getPublicPlanByName(
+    @Param('name') name: string,
   ): Promise<PlanResponseDto> {
-    return await this.plansService.findPlanBySlug(slug, true);
+    return await this.plansService.findPlanByName(name, true);
   }
 }

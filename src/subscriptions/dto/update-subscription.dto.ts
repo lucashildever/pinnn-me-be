@@ -1,32 +1,13 @@
-import {
-  IsEnum,
-  IsString,
-  IsObject,
-  MaxLength,
-  IsOptional,
-  IsDateString,
-} from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsEnum, IsOptional } from 'class-validator';
+import { OmitType, PartialType } from '@nestjs/mapped-types';
 
+import { CreateSubscriptionDto } from './create-subscription.dto';
 import { SubscriptionStatus } from '../enums/subscription-status.enum';
 
-export class UpdateSubscriptionDto {
+export class UpdateSubscriptionDto extends PartialType(
+  OmitType(CreateSubscriptionDto, ['userId']),
+) {
   @IsOptional()
   @IsEnum(SubscriptionStatus)
   status?: SubscriptionStatus;
-
-  @IsOptional()
-  @IsDateString()
-  @Type(() => Date)
-  startAt?: Date;
-
-  @IsOptional()
-  @IsDateString()
-  @Type(() => Date)
-  currentPeriodEnd?: Date;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(255)
-  billingProviderId?: string;
 }

@@ -2,7 +2,6 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { Price } from './entities/price.entity';
 import { Plan } from './entities/plan.entity';
 
 import { PlanResponseDto } from './dto/plan-response.dto';
@@ -15,30 +14,30 @@ export class PlansService {
   constructor(
     @InjectRepository(Plan)
     private readonly plansRepository: Repository<Plan>,
-    @InjectRepository(Price)
-    private readonly pricesRepository: Repository<Price>,
   ) {}
 
   async createPlan(createPlanDto: CreatePlanDto): Promise<PlanResponseDto> {
-    const { prices: pricesData, ...planData } = createPlanDto;
-
-    if (!pricesData || pricesData.length === 0) {
-      throw new BadRequestException('At least one price must be provided');
+    if (!createPlanDto.monthlyPrice && !createPlanDto.yearlyPrice) {
+      throw new BadRequestException(
+        'At least one price (monthly or yearly) must be provided',
+      );
     }
 
-    // Verifica se já existe plano do mesmo tipo
     const existingPlan = await this.plansRepository.findOne({
-      where: { type: planData.type },
+      where: { type: createPlanDto.type },
     });
+
     if (existingPlan) {
-      throw new BadRequestException(`There is already a ${planData.type} plan`);
+      throw new BadRequestException(
+        `There is already a ${createPlanDto.type} plan`,
+      );
     }
 
-    // Verifica plano padrão
-    if (planData.isDefault) {
+    if (createPlanDto.isDefault) {
       const defaultPlan = await this.plansRepository.findOne({
         where: { isDefault: true },
       });
+
       if (defaultPlan) {
         throw new BadRequestException(
           'A default plan already exists. Set isDefault to false or remove the existing default plan',
@@ -46,30 +45,12 @@ export class PlansService {
       }
     }
 
-    const plan = this.plansRepository.create(planData);
+    const plan = this.plansRepository.create(createPlanDto);
     const savedPlan = await this.plansRepository.save(plan);
 
-    const priceEntities = pricesData.map((pd) => {
-      const price = this.pricesRepository.create(pd);
-      price.plan = savedPlan;
-      price.planId = savedPlan.id;
-      return price;
-    });
-    await this.pricesRepository.save(priceEntities);
-
-    const planWithPrices = await this.plansRepository.findOne({
-      where: { id: savedPlan.id },
-      relations: ['prices'],
-    });
-
-    if (!planWithPrices) {
-      throw new BadRequestException(
-        'Error while trying to retrieve created plan',
-      );
-    }
-
-    return this.mapPlanToResponse(planWithPrices);
+    return this.mapPlanToResponse(savedPlan);
   }
+
   async findAllPlans(onlyActivePlans: boolean): Promise<PlanResponseDto[]> {
     const where = onlyActivePlans ? { status: PlanStatus.ACTIVE } : {};
 
@@ -81,12 +62,9 @@ export class PlansService {
     return plans.map((p) => this.mapPlanToResponse(p));
   }
 
-  async findPlanById(
-    id: string,
-    onlyActivePlans: boolean,
-  ): Promise<PlanResponseDto> {
+  async findByIdOrFail(id: string, active: boolean): Promise<PlanResponseDto> {
     const where: any = { id };
-    if (onlyActivePlans) {
+    if (active) {
       where.status = PlanStatus.ACTIVE;
     }
 
@@ -102,12 +80,13 @@ export class PlansService {
     return this.mapPlanToResponse(plan);
   }
 
-  async findPlanBySlug(
-    slug: string,
-    onlyActivePlans: boolean,
+  async findPlanByName(
+    name: string,
+    active: boolean,
   ): Promise<PlanResponseDto> {
-    const where: any = { slug };
-    if (onlyActivePlans) {
+    const where: any = { name };
+
+    if (active) {
       where.status = PlanStatus.ACTIVE;
     }
 
@@ -121,20 +100,55 @@ export class PlansService {
     }
 
     return this.mapPlanToResponse(plan);
+  }
+
+  async findByStripePriceId(stripePriceId: string): Promise<Plan> {
+    const plan = await this.plansRepository.findOne({
+      where: [
+        { monthlyStripePriceId: stripePriceId },
+        { yearlyStripePriceId: stripePriceId },
+      ],
+    });
+
+    if (!plan) {
+      throw new Error(
+        `Plano não encontrado para stripePriceId: ${stripePriceId}`,
+      );
+    }
+
+    return plan;
   }
 
   private mapPlanToResponse(plan: Plan): PlanResponseDto {
     return {
+      id: plan.id,
       name: plan.name,
       type: plan.type,
       isDefault: plan.isDefault,
       features: plan.features,
       limits: plan.limits,
-      prices: (plan.prices || []).map((p) => ({
-        price: typeof p.price === 'string' ? parseFloat(p.price) : p.price,
-        billingPeriod: p.billingPeriod,
-        currency: p.currency,
-      })),
+      prices: [
+        ...(plan.monthlyPrice && plan.monthlyStripePriceId
+          ? [
+              {
+                price: plan.monthlyPrice,
+                billingPeriod: 'monthly' as const,
+                currency: 'BRL', // ou sua moeda padrão
+                stripePriceId: plan.monthlyStripePriceId,
+              },
+            ]
+          : []),
+        ...(plan.yearlyPrice && plan.yearlyStripePriceId
+          ? [
+              {
+                price: plan.yearlyPrice,
+                billingPeriod: 'yearly' as const,
+                currency: 'BRL', // ou sua moeda padrão
+                stripePriceId: plan.yearlyStripePriceId,
+              },
+            ]
+          : []),
+      ],
     };
   }
 }
