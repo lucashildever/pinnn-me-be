@@ -13,6 +13,9 @@ import { PlanType } from 'src/plans/enums/plan-type.enum';
 
 export class CreateInvoiceDto {
   @IsUUID()
+  userId: string;
+
+  @IsUUID()
   billingInfoId: string;
 
   @IsOptional()

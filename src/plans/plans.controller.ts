@@ -53,7 +53,7 @@ export class PlansController {
     description: 'Forbidden - Admin access required',
   })
   async getAllPlans(): Promise<PlanResponseDto[]> {
-    return await this.plansService.findAllPlans(false);
+    return await this.plansService.findAllPlans();
   }
 
   @Get(':id')
@@ -110,7 +110,7 @@ export class PublicPlanController {
     type: [PlanResponseDto],
   })
   async getPublicPlans(): Promise<PlanResponseDto[]> {
-    return await this.plansService.findAllPlans(true);
+    return await this.plansService.findAllPlans();
   }
 
   @Get('slug/:slug')

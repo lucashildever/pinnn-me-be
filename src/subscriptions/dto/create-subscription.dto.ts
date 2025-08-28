@@ -27,5 +27,5 @@ export class CreateSubscriptionDto {
   @IsOptional()
   @IsString()
   @MaxLength(255)
-  billingProviderId?: string;
+  stripeSubscriptionId?: string;
 }

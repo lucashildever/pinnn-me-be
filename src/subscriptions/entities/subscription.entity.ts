@@ -48,7 +48,7 @@ export class Subscription extends TimestampEntity {
   currentPeriodEnd: Date;
 
   @Column({ nullable: true })
-  billingProviderId?: string; // stripe subscription id
+  stripeSubscriptionId?: string;
 
   // Métodos essenciais para MVP
   isActive(): boolean {

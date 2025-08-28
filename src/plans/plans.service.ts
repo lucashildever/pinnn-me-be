@@ -8,6 +8,7 @@ import { PlanResponseDto } from './dto/plan-response.dto';
 import { CreatePlanDto } from './dto/create-plan.dto';
 
 import { PlanStatus } from './enums/plan-status.enum';
+import { PlanType } from './enums/plan-type.enum';
 
 @Injectable()
 export class PlansService {
@@ -17,10 +18,15 @@ export class PlansService {
   ) {}
 
   async createPlan(createPlanDto: CreatePlanDto): Promise<PlanResponseDto> {
-    if (!createPlanDto.monthlyPrice && !createPlanDto.yearlyPrice) {
-      throw new BadRequestException(
-        'At least one price (monthly or yearly) must be provided',
-      );
+    if (createPlanDto.type === PlanType.PRO) {
+      if (
+        !createPlanDto.monthlyStripePriceId &&
+        !createPlanDto.yearlyStripePriceId
+      ) {
+        throw new BadRequestException(
+          'At least one Stripe Price ID (monthly or yearly) must be provided for PRO plans',
+        );
+      }
     }
 
     const existingPlan = await this.plansRepository.findOne({
@@ -51,14 +57,8 @@ export class PlansService {
     return this.mapPlanToResponse(savedPlan);
   }
 
-  async findAllPlans(onlyActivePlans: boolean): Promise<PlanResponseDto[]> {
-    const where = onlyActivePlans ? { status: PlanStatus.ACTIVE } : {};
-
-    const plans = await this.plansRepository.find({
-      relations: ['prices'],
-      where,
-    });
-
+  async findAllPlans(): Promise<PlanResponseDto[]> {
+    const plans = await this.plansRepository.find();
     return plans.map((p) => this.mapPlanToResponse(p));
   }
 
@@ -112,7 +112,7 @@ export class PlansService {
 
     if (!plan) {
       throw new Error(
-        `Plano não encontrado para stripePriceId: ${stripePriceId}`,
+        `Plan not found for this stripePriceId: ${stripePriceId}`,
       );
     }
 
@@ -128,22 +128,18 @@ export class PlansService {
       features: plan.features,
       limits: plan.limits,
       prices: [
-        ...(plan.monthlyPrice && plan.monthlyStripePriceId
+        ...(plan.monthlyStripePriceId
           ? [
               {
-                price: plan.monthlyPrice,
                 billingPeriod: 'monthly' as const,
-                currency: 'BRL', // ou sua moeda padrão
                 stripePriceId: plan.monthlyStripePriceId,
               },
             ]
           : []),
-        ...(plan.yearlyPrice && plan.yearlyStripePriceId
+        ...(plan.yearlyStripePriceId
           ? [
               {
-                price: plan.yearlyPrice,
                 billingPeriod: 'yearly' as const,
-                currency: 'BRL', // ou sua moeda padrão
                 stripePriceId: plan.yearlyStripePriceId,
               },
             ]

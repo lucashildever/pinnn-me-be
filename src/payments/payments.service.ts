@@ -6,7 +6,9 @@ import {
   UnauthorizedException,
   InternalServerErrorException,
 } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
+import { Repository } from 'typeorm';
 
 import { PaymentPeriod } from './enums/payment-period.enum';
 
@@ -17,12 +19,12 @@ import { ReactivateStripeSubscriptionResponseDto } from './dto/reactivate-stripe
 import { CheckoutSessionResponseDto } from './dto/checkout-session-response.dto';
 import { SessionStatusDto } from './dto/session-status.dto';
 import { StripeInvoiceDto } from './dto/stripe-invoice.dto';
+import { CreatePaymentDto } from './dto/create-payment.dto';
+
+import { PaymentAttempt } from './entities/payment-attempt.entity';
+import { Payment } from './entities/payment.entity';
 
 import Stripe from 'stripe';
-import { InjectRepository } from '@nestjs/typeorm';
-import { PaymentAttempt } from './entities/payment-attempt.entity';
-import { Repository } from 'typeorm';
-import { PaymentAttemptStatus } from './enums/payment-attempt-status.enum';
 
 @Injectable()
 export class PaymentsService {
@@ -33,6 +35,8 @@ export class PaymentsService {
 
     @InjectRepository(PaymentAttempt)
     private readonly paymentAttemptRepository: Repository<PaymentAttempt>,
+    @InjectRepository(Payment)
+    private readonly paymentRepository: Repository<Payment>,
 
     @Inject('STRIPE') private stripe: Stripe,
   ) {}
@@ -213,14 +217,44 @@ export class PaymentsService {
     }
   }
 
-  async updatePaymentAttemptStatus(
+  async updatePaymentAttemptBySessionId(
     sessionId: string,
-    newStatus: PaymentAttemptStatus,
+    updateData: Partial<PaymentAttempt>,
   ) {
     return this.paymentAttemptRepository.update(
       { stripeSessionId: sessionId },
-      { status: newStatus },
+      updateData,
     );
+  }
+
+  async updatePaymentAttemptByPaymentIntentId(
+    paymentIntentId: string,
+    updateData: Partial<PaymentAttempt>,
+  ) {
+    return this.paymentAttemptRepository.update(
+      { stripePaymentIntentId: paymentIntentId },
+      updateData,
+    );
+  }
+
+  async updatePaymentAttemptById(
+    id: string,
+    updateData: Partial<PaymentAttempt>,
+  ) {
+    return this.paymentAttemptRepository.update(id, updateData);
+  }
+
+  async findPaymentAttemptByPaymentIntentId(
+    paymentIntentId: string,
+  ): Promise<PaymentAttempt | null> {
+    return this.paymentAttemptRepository.findOne({
+      where: { stripePaymentIntentId: paymentIntentId },
+    });
+  }
+
+  async createPayment(dto: CreatePaymentDto): Promise<Payment> {
+    const payment = this.paymentRepository.create(dto);
+    return this.paymentRepository.save(payment);
   }
 
   // Private helpers

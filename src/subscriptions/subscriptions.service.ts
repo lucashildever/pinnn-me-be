@@ -15,8 +15,6 @@ import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
 
 import { PlansService } from 'src/plans/plans.service';
 
-import Stripe from 'stripe';
-
 @Injectable()
 export class SubscriptionsService {
   constructor(
@@ -39,7 +37,7 @@ export class SubscriptionsService {
       status: SubscriptionStatus.ACTIVE,
       startAt: createDto.startAt || new Date(),
       currentPeriodEnd: createDto.currentPeriodEnd,
-      billingProviderId: createDto.billingProviderId,
+      stripeSubscriptionId: createDto.stripeSubscriptionId,
     });
 
     return this.subscriptionsRepository.save(subscription);
