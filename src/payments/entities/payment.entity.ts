@@ -9,7 +9,6 @@ import {
 
 import { TimestampEntity } from 'src/common/entities/timestamp.entity';
 import { PaymentAttempt } from './payment-attempt.entity';
-import { PaymentMethod } from './payment-method.entity';
 import { Invoice } from 'src/billings/entities/invoice.entity';
 
 import { PaymentStatus } from '../enums/payment-status.enum';
@@ -43,12 +42,6 @@ export class Payment extends TimestampEntity {
     onDelete: 'RESTRICT',
   })
   invoice: Invoice;
-
-  @ManyToOne(() => PaymentMethod, (pm) => pm.payments, {
-    nullable: true,
-    onDelete: 'SET NULL',
-  })
-  paymentMethod?: PaymentMethod;
 
   @OneToOne(() => PaymentAttempt, { nullable: true })
   @JoinColumn()

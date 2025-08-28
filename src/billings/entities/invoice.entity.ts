@@ -24,13 +24,17 @@ export class Invoice extends TimestampEntity {
   id: string;
 
   @ManyToOne(() => UserEntity, (user) => user.invoices, { nullable: false })
+  @JoinColumn({ name: 'userId' })
   user: UserEntity;
 
-  @OneToMany(() => Payment, (payment) => payment.invoice)
-  payments: Payment[];
+  @Column()
+  userId: string;
 
   @OneToMany(() => PaymentAttempt, (attempt) => attempt.invoice)
-  paymentAttempts: PaymentAttempt[];
+  paymentAttempts?: PaymentAttempt[];
+
+  @OneToMany(() => Payment, (payment) => payment.invoice)
+  payments?: Payment[];
 
   @ManyToOne(() => BillingInfo, (billingInfo) => billingInfo.invoices)
   @JoinColumn({ name: 'billingInfoId' })
@@ -61,13 +65,15 @@ export class Invoice extends TimestampEntity {
 
   // Values
   @Column({ type: 'decimal', precision: 10, scale: 2 })
-  amount: number; // Amount in the moment of registration (ex: if user have a 15% discount)
+  amount: number;
+  // Amount in the moment of registration (ex: if user have a 15% discount
+  // the amount will be different from the actual price)
 
   @Column({ default: 'BRL' })
   currency: string;
 
   @Column({ nullable: true })
-  stripeInvoiceId?: string; // in_xxx
+  stripeInvoiceId?: string;
 
   @Column({ nullable: true })
   planName?: string; // Plan name in the moment of registration (ex: PlanType may change in the future)

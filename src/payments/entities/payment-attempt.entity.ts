@@ -7,7 +7,6 @@ import {
 } from 'typeorm';
 
 import { TimestampEntity } from 'src/common/entities/timestamp.entity';
-import { PaymentMethod } from './payment-method.entity';
 import { Invoice } from 'src/billings/entities/invoice.entity';
 import { Payment } from './payment.entity';
 
@@ -41,16 +40,10 @@ export class PaymentAttempt extends TimestampEntity {
   status: PaymentAttemptStatus;
 
   @ManyToOne(() => Invoice, (invoice) => invoice.paymentAttempts, {
-    nullable: false,
+    nullable: true,
     onDelete: 'RESTRICT',
   })
-  invoice: Invoice;
-
-  @ManyToOne(() => PaymentMethod, (pm) => pm.attempts, {
-    nullable: true,
-    onDelete: 'SET NULL',
-  })
-  paymentMethod?: PaymentMethod;
+  invoice?: Invoice;
 
   @OneToOne(() => Payment, (payment) => payment.originAttempt, {
     nullable: true,

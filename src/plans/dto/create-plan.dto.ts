@@ -2,14 +2,12 @@ import {
   IsEnum,
   IsArray,
   IsObject,
-  IsNumber,
   IsString,
   IsBoolean,
   IsOptional,
   IsNotEmpty,
   ArrayNotEmpty,
 } from 'class-validator';
-
 import { PlanType } from '../enums/plan-type.enum';
 
 export class CreatePlanDto {
@@ -41,12 +39,4 @@ export class CreatePlanDto {
   @IsString()
   @IsOptional()
   yearlyStripePriceId?: string;
-
-  @IsNumber()
-  @IsOptional()
-  monthlyPrice?: number;
-
-  @IsNumber()
-  @IsOptional()
-  yearlyPrice?: number;
 }

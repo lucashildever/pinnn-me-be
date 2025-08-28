@@ -10,14 +10,13 @@ import { BillingInfo } from './entities/billing-info.entity';
 import { Invoice } from './entities/invoice.entity';
 
 import { BillingInfoResponseDto } from './dto/billing-response.dto';
-import { InvoiceResponseDto } from './dto/invoice-response.dto';
 import { UpdateBillingInfoDto } from './dto/update-billing-info.dto';
 import { CreateBillingInfoDto } from './dto/create-billing-info.dto';
+import { InvoiceResponseDto } from './dto/invoice-response.dto';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 
 import { InvoiceStatus } from './enums/invoice-status.enum';
-import Stripe from 'stripe';
 
 @Injectable()
 export class BillingsService {
@@ -63,14 +62,11 @@ export class BillingsService {
   ): Promise<BillingInfo> {
     const billingInfo = await this.billingInfoRepository.findOne({
       where: { stripeCustomerId },
+      relations: ['user'],
     });
-
     if (!billingInfo) {
-      throw new Error(
-        `BillingInfo não encontrado para customer ${stripeCustomerId}`,
-      );
+      throw new Error(`BillingInfo not found for customer ${stripeCustomerId}`);
     }
-
     return billingInfo;
   }
 
@@ -90,14 +86,9 @@ export class BillingsService {
   async updateStripeInfo(
     userId: string,
     stripeCustomerId: string,
-    defaultPaymentMethodId?: string,
   ): Promise<BillingInfoResponseDto> {
     const billingInfo = await this.findBillingInfoByUserIdOrFail(userId);
     billingInfo.stripeCustomerId = stripeCustomerId;
-
-    if (defaultPaymentMethodId) {
-      billingInfo.defaultPaymentMethodId = defaultPaymentMethodId;
-    }
 
     const updated = await this.billingInfoRepository.save(billingInfo);
 
@@ -114,6 +105,24 @@ export class BillingsService {
   async findInvoiceById(id: string): Promise<InvoiceResponseDto> {
     const invoice = await this.findInvoiceOrFail(id);
     return this.mapInvoiceToResponse(invoice);
+  }
+
+  async findInvoiceByStripeId(
+    stripeInvoiceId: string,
+  ): Promise<Invoice | null> {
+    return this.invoiceRepository.findOne({
+      where: { stripeInvoiceId },
+    });
+  }
+
+  async updateInvoiceStatus(
+    invoiceId: string,
+    status: InvoiceStatus,
+  ): Promise<void> {
+    await this.invoiceRepository.update(invoiceId, {
+      status,
+      processedAt: new Date(),
+    });
   }
 
   async updateInvoice(
@@ -230,15 +239,8 @@ export class BillingsService {
       id: billingInfo.id,
       userId: billingInfo.userId,
       fullName: billingInfo.fullName,
-      addressStreet: billingInfo.addressStreet,
-      addressCity: billingInfo.addressCity,
-      addressState: billingInfo.addressState,
-      addressZipCode: billingInfo.addressZipCode,
-      addressCountry: billingInfo.addressCountry,
       currency: billingInfo.currency,
-      taxId: billingInfo.taxId,
       hasStripeCustomer: !!billingInfo.stripeCustomerId,
-      hasDefaultPaymentMethod: !!billingInfo.defaultPaymentMethodId,
       updatedAt: billingInfo.updatedAt,
     };
   }

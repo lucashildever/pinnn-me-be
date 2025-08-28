@@ -2,42 +2,14 @@ import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class CreateBillingInfoDto {
   @IsString()
+  @IsOptional()
+  fullName?: string;
+
+  @IsString()
   @IsNotEmpty()
-  fullName: string;
-
-  @IsOptional()
-  @IsString()
-  addressStreet?: string;
-
-  @IsOptional()
-  @IsString()
-  addressCity?: string;
-
-  @IsOptional()
-  @IsString()
-  addressState?: string;
-
-  @IsOptional()
-  @IsString()
-  addressZipCode?: string;
-
-  @IsOptional()
-  @IsString()
-  addressCountry?: string;
-
-  @IsOptional()
-  @IsString()
-  stripeCustomerId?: string;
-
-  @IsOptional()
-  @IsString()
-  defaultPaymentMethodId?: string;
+  stripeCustomerId: string;
 
   @IsOptional()
   @IsString()
   currency?: string;
-
-  @IsOptional()
-  @IsString()
-  taxId?: string;
 }
