@@ -9,7 +9,7 @@ import { Repository } from 'typeorm';
 import { BillingInfo } from './entities/billing-info.entity';
 import { Invoice } from './entities/invoice.entity';
 
-import { BillingInfoResponseDto } from './dto/billing-response.dto';
+import { BillingInfoResponseDto } from './dto/billing-info-response.dto';
 import { UpdateBillingInfoDto } from './dto/update-billing-info.dto';
 import { CreateBillingInfoDto } from './dto/create-billing-info.dto';
 import { InvoiceResponseDto } from './dto/invoice-response.dto';
@@ -107,7 +107,7 @@ export class BillingsService {
     return this.mapInvoiceToResponse(invoice);
   }
 
-  async findInvoiceByStripeId(
+  async findInvoiceInstanceById(
     stripeInvoiceId: string,
   ): Promise<Invoice | null> {
     return this.invoiceRepository.findOne({
@@ -238,7 +238,7 @@ export class BillingsService {
     return {
       id: billingInfo.id,
       userId: billingInfo.userId,
-      fullName: billingInfo.fullName,
+      name: billingInfo.name,
       currency: billingInfo.currency,
       hasStripeCustomer: !!billingInfo.stripeCustomerId,
       updatedAt: billingInfo.updatedAt,

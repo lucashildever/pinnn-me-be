@@ -84,19 +84,18 @@ export class WebhooksService {
             },
           );
         }
-        return;
+        break;
       }
-
-      case 'checkout.session.expired':
+      case 'checkout.session.expired': {
         const sessionId = event.data.object.id;
 
         await this.paymentsService.updatePaymentAttemptBySessionId(sessionId, {
           status: PaymentAttemptStatus.CANCELLED,
         });
 
-        return;
-
-      case 'customer.subscription.created':
+        break;
+      }
+      case 'customer.subscription.created': {
         const stripeSubscription = event.data.object;
         const customerId = stripeSubscription.customer as string;
 
@@ -118,34 +117,200 @@ export class WebhooksService {
           stripeSubscriptionId: stripeSubscription.id,
         });
 
-        return;
-
-      case 'customer.subscription.deleted':
+        break;
+      }
+      case 'customer.subscription.deleted': {
         const subscriptionId = (event.data.object as Stripe.Subscription).id;
 
         await this.subscriptionsService.updateSubscription(subscriptionId, {
           status: SubscriptionStatus.CANCELLED,
         });
 
-        return;
+        break;
+      }
+      // verificar qual a situação em que o usuario deixa de pagar ou falha, e eu ainda assim
+      // não bloqueio imediatamente
+      case 'customer.subscription.updated': {
+        const subscription = event.data.object;
+        const previousAttributes = event.data.previous_attributes;
+        const currentStatus = subscription.status;
+        const prevStatus = previousAttributes?.status;
+
+        const statusChanged = prevStatus && prevStatus !== currentStatus;
+
+        if (statusChanged) {
+          console.log(
+            `Status change detected: ${prevStatus} → ${currentStatus}`,
+          );
+
+          const skipConditions = [
+            currentStatus === 'canceled', // Handled in customer.subscription.deleted
+            currentStatus === 'paused', // Handled in customer.subscription.paused
+            currentStatus === 'active' && prevStatus === 'paused', // Handled in customer.subscription.resumed
+          ];
+
+          if (skipConditions.some((condition) => condition)) break;
+
+          // TODO - liberação de acesso deve ser feita em eventos
+          // de confirmação de pagamento
+          const accessGrantingTransitions = {
+            trialing: {
+              active: () => {
+                // handleTrialToProPaid(subscription)
+                // - Atualizar banco de dados: user.subscription_status = 'pro_paid'
+                // - Enviar email de conversão
+                // - Ativar recursos Pro completos
+                // - Analytics: track conversion
+              },
+            },
+            past_due: {
+              active: () => {
+                // handleRestoreProAccess(subscription)
+                // - Restaurar acesso completo aos recursos Pro
+                // - Atualizar banco de dados: user.subscription_status = 'pro_active'
+                // - Enviar email de confirmação de pagamento
+                // - Remover limitações de uso
+              },
+            },
+          };
+
+          const accessBlockingTransitions = {
+            active: {
+              unpaid: () => {
+                // handleBlockAccessImmediately(subscription, 'unpaid')
+                // - Bloquear acesso aos recursos Pro imediatamente
+                // - Atualizar banco de dados: user.subscription_status = 'blocked'
+                // - Enviar notificação sobre bloqueio
+                // - Redirecionar para página de pagamento se aplicável
+              },
+            },
+            trialing: {
+              incomplete_expired: () => {
+                // handleBlockAccessImmediately(subscription, 'trial_expired')
+                // - Bloquear acesso aos recursos Pro imediatamente
+                // - Atualizar banco de dados: user.subscription_status = 'blocked'
+                // - Enviar notificação sobre bloqueio (trial expirado)
+                // - Redirecionar para página de upgrade/pagamento
+              },
+            },
+          };
+
+          await executeTransition(
+            accessGrantingTransitions,
+            prevStatus,
+            currentStatus,
+            subscription,
+          );
+
+          await executeTransition(
+            accessBlockingTransitions,
+            prevStatus,
+            currentStatus,
+            subscription,
+          );
+        }
+
+        // current_period_end
+        if (previousAttributes?.items?.data?.[0]?.current_period_end) {
+          const oldPeriodEnd = new Date(
+            previousAttributes.items.data[0].current_period_end * 1000,
+          );
+          const newPeriodEnd = new Date(
+            subscription.items.data[0].current_period_end * 1000,
+          );
+
+          if (oldPeriodEnd.getTime() !== newPeriodEnd.getTime()) {
+            // handleRenewalCalendarUpdate(subscription, oldPeriodEnd, newPeriodEnd)
+            // - Atualizar calendario de renovação no banco de dados
+            // - Atualizar lembretes de cobrança
+            // - Notificar usuário sobre mudança de data
+          }
+        }
+
+        // trial_end
+        if (previousAttributes?.trial_end !== undefined) {
+          const oldTrialEnd = previousAttributes.trial_end;
+          const newTrialEnd = subscription.trial_end;
+
+          if (oldTrialEnd !== newTrialEnd) {
+            // handleTrialEndChange(subscription, oldTrialEnd, newTrialEnd)
+            // - Gerenciar extensão ou redução de trial
+            // - Atualizar notificações de fim de trial
+            // - Ajustar onboarding timeline
+          }
+        }
+
+        // cancel_at_period_end
+        if (previousAttributes?.cancel_at_period_end !== undefined) {
+          const oldCancelAtPeriodEnd = previousAttributes.cancel_at_period_end;
+          const newCancelAtPeriodEnd = subscription.cancel_at_period_end;
+
+          if (oldCancelAtPeriodEnd === false && newCancelAtPeriodEnd === true) {
+            // handleScheduleFutureBlock(subscription)
+            // - Agendar bloqueio para subscription.current_period_end
+            // - Criar job/task para executar bloqueio
+            // - Enviar email confirmando cancelamento agendado
+            // - Mostrar período restante na UI
+          } else if (
+            oldCancelAtPeriodEnd === true &&
+            newCancelAtPeriodEnd === false
+          ) {
+            // handleCancelScheduledBlock(subscription)
+            // - Cancelar job/task de bloqueio agendado
+            // - Restaurar subscription normal
+            // - Enviar email confirmando cancelamento do cancelamento
+            // - Atualizar UI removendo avisos de cancelamento
+          }
+        }
+
+        async function executeTransition(
+          transitions: any,
+          prevStatus: string | null,
+          currentStatus: string,
+          subscription: Stripe.Subscription,
+        ) {
+          const prevStatusKey = prevStatus ?? 'undefined';
+          const fromTransitions = transitions[prevStatusKey];
+
+          if (!fromTransitions) return; // No transition mapped for this previous state
+
+          const transitionHandler = fromTransitions[currentStatus];
+
+          if (!transitionHandler) return; // No transition mapped for current state
+
+          try {
+            await transitionHandler();
+          } catch (error) {
+            console.error(
+              `❌ Erro na transição ${prevStatusKey} → ${currentStatus}:`,
+              error,
+            );
+            // logTransitionError(subscription, prevStatusKey, currentStatus, error)
+            // - Enviar erro para sistema de monitoramento (Sentry, etc)
+            // - Criar ticket de suporte se necessário
+            // - Alertar equipe de desenvolvimento
+            // - Registrar detalhes do erro: subscriptionId, customerId, transition, error, timestamp
+          }
+        }
+
+        break;
+      }
 
       case 'invoice.created': {
         const stripeInvoice = event.data.object as Stripe.Invoice;
+        const customerId = stripeInvoice.customer as string;
 
         if (!stripeInvoice.id) {
           throw new Error('Stripe invoice ID is missing');
         }
 
         const billingInfo =
-          await this.billingsService.findBillingInfoByCustomerId(
-            stripeInvoice.customer as string,
-          );
+          await this.billingsService.findBillingInfoByCustomerId(customerId);
 
         if (!billingInfo.user) {
           throw new Error('User not found in billingInfo');
         }
 
-        // Criar o invoice
         const createInvoiceDto: CreateInvoiceDto = {
           userId: billingInfo.user.id,
           billingInfoId: billingInfo.id,
@@ -155,21 +320,19 @@ export class WebhooksService {
           type: InvoiceType.SUBSCRIPTION,
           amount: stripeInvoice.amount_due / 100,
           currency: stripeInvoice.currency.toUpperCase(),
-          stripeInvoiceId: stripeInvoice.id, // Agora TypeScript sabe que não é undefined
+          stripeInvoiceId: stripeInvoice.id,
           description: stripeInvoice.description || undefined,
         };
 
-        const createdInvoiceDto =
-          await this.billingsService.createInvoice(createInvoiceDto);
+        await this.billingsService.createInvoice(createInvoiceDto);
 
-        // Atualizar PaymentAttempt com as informações do PaymentIntent e relacionar com o invoice
         const paymentIntentId = (stripeInvoice as any).payment_intent as string;
 
         if (paymentIntentId) {
-          // Buscar a invoice completa para poder relacionar
-          const fullInvoice = await this.billingsService.findInvoiceByStripeId(
-            stripeInvoice.id,
-          ); // Agora não dá erro
+          const fullInvoice =
+            await this.billingsService.findInvoiceInstanceById(
+              stripeInvoice.id,
+            );
 
           if (fullInvoice) {
             await this.paymentsService.updatePaymentAttemptByPaymentIntentId(
@@ -183,19 +346,16 @@ export class WebhooksService {
           }
         }
 
-        return;
+        break;
       }
-
       case 'invoice.payment_succeeded': {
         const stripeInvoice = event.data.object as Stripe.Invoice;
 
-        // Verificar se stripeInvoice.id existe
         if (!stripeInvoice.id) {
           throw new Error('Stripe invoice ID is missing');
         }
 
-        // 1. Buscar o invoice pelo stripeInvoiceId
-        const invoice = await this.billingsService.findInvoiceByStripeId(
+        const invoice = await this.billingsService.findInvoiceInstanceById(
           stripeInvoice.id,
         );
 
@@ -205,7 +365,6 @@ export class WebhooksService {
           );
         }
 
-        // 2. Buscar o paymentAttempt pelo stripePaymentIntentId
         const paymentIntentId = (stripeInvoice as any).payment_intent as string;
 
         if (!paymentIntentId) {
@@ -223,7 +382,6 @@ export class WebhooksService {
           );
         }
 
-        // 3. Atualizar status do paymentAttempt para SUCCEEDED
         const chargeId = (stripeInvoice as any).charge as string;
 
         await this.paymentsService.updatePaymentAttemptById(paymentAttempt.id, {
@@ -231,7 +389,6 @@ export class WebhooksService {
           ...(chargeId && { stripeChargeId: chargeId }),
         });
 
-        // 4. Criar o Payment
         const createPaymentDto: CreatePaymentDto = {
           invoiceId: invoice.id,
           originAttemptId: paymentAttempt.id,
@@ -244,17 +401,37 @@ export class WebhooksService {
 
         await this.paymentsService.createPayment(createPaymentDto);
 
-        // 5. Atualizar status do invoice para PAID
         await this.billingsService.updateInvoiceStatus(
           invoice.id,
           InvoiceStatus.COMPLETED,
         );
 
-        return;
+        break;
       }
+      case 'invoice.payment_failed': {
+        const stripeInvoice = event.data.object as Stripe.Invoice;
+        const subscriptionId = (stripeInvoice as any).subscription as string;
 
+        if (subscriptionId) {
+          await this.subscriptionsService.updateSubscription(subscriptionId, {
+            status: SubscriptionStatus.CANCELLED,
+          });
+        }
+
+        const paymentIntentId = (stripeInvoice as any).payment_intent as string;
+
+        if (paymentIntentId) {
+          await this.paymentsService.updatePaymentAttemptByPaymentIntentId(
+            paymentIntentId,
+            {
+              status: PaymentAttemptStatus.FAILED,
+            },
+          );
+        }
+
+        break;
+      }
       default:
-        // Ignora eventos não tratados (não é erro)
         console.log(`Unhandled event type: ${event.type}`);
     }
   }

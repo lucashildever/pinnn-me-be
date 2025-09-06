@@ -1,7 +1,7 @@
 export class BillingInfoResponseDto {
   id: string;
   userId: string;
-  fullName: string;
+  name: string;
   currency: string;
   hasStripeCustomer: boolean;
   stripeCustomerId?: string;

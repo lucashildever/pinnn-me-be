@@ -27,7 +27,7 @@ export class BillingInfo extends TimestampEntity {
   userId: string;
 
   @Column()
-  fullName: string;
+  name: string;
 
   @Column({ nullable: true })
   stripeCustomerId?: string;

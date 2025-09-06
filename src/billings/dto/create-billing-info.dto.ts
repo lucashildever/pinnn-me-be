@@ -3,7 +3,7 @@ import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 export class CreateBillingInfoDto {
   @IsString()
   @IsOptional()
-  fullName?: string;
+  name?: string;
 
   @IsString()
   @IsNotEmpty()

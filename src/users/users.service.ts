@@ -194,6 +194,10 @@ export class UsersService {
     return exists;
   }
 
+  async findUserEmail(userId: string): Promise<string> {
+    return (await this.findOrFail(userId, false, ['email'])).email;
+  }
+
   async findOrFail(
     identifier: string,
     onlyActive: boolean = true,

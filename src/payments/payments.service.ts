@@ -25,6 +25,8 @@ import { PaymentAttempt } from './entities/payment-attempt.entity';
 import { Payment } from './entities/payment.entity';
 
 import Stripe from 'stripe';
+import { CreateBillingInfoDto } from 'src/billings/dto/create-billing-info.dto';
+import { CreatePaymentAttemptDto } from './dto/create-payment-attempt.dto';
 
 @Injectable()
 export class PaymentsService {
@@ -50,6 +52,14 @@ export class PaymentsService {
       const customer = await this.findOrCreateStripeCustomer(userId);
       const priceId = this.getPriceIdByPlan(planType, period);
 
+      const paymentAttempt = await this.createPaymentAttempt({
+        metadata: {
+          userId: userId,
+          planType: planType,
+          period: period,
+        },
+      });
+
       const session = await this.stripe.checkout.sessions.create({
         customer: customer.id,
         payment_method_types: ['card'],
@@ -65,10 +75,14 @@ export class PaymentsService {
         metadata: {
           userId: userId,
           planType: planType,
+          paymentAttemptId: paymentAttempt.id,
         },
         allow_promotion_codes: true,
         billing_address_collection: 'required',
       });
+
+      paymentAttempt.stripeSessionId = session.id;
+      await this.paymentAttemptRepository.save(paymentAttempt);
 
       return {
         sessionId: session.id,
@@ -252,9 +266,60 @@ export class PaymentsService {
     });
   }
 
+  async createPaymentAttempt(
+    dto: CreatePaymentAttemptDto,
+  ): Promise<PaymentAttempt> {
+    try {
+      const paymentAttempt = this.paymentAttemptRepository.create(dto);
+      return await this.paymentAttemptRepository.save(paymentAttempt);
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Error while trying to create payment attempt',
+      );
+    }
+  }
+
   async createPayment(dto: CreatePaymentDto): Promise<Payment> {
     const payment = this.paymentRepository.create(dto);
     return this.paymentRepository.save(payment);
+  }
+
+  async createStripeCustomer(
+    userId: string,
+    email: string,
+    name?: string,
+  ): Promise<Stripe.Customer> {
+    const idempotencyKey = `create-customer-user-${userId}`;
+    try {
+      const customerData: Stripe.CustomerCreateParams = {
+        email: email,
+        metadata: { userId },
+      };
+
+      if (name) {
+        customerData.name = name;
+      }
+
+      const stripeCustomer = await this.stripe.customers.create(customerData, {
+        idempotencyKey,
+      });
+
+      const createBillingInfoDto: CreateBillingInfoDto = {
+        stripeCustomerId: stripeCustomer.id,
+        name: name,
+      };
+
+      await this.billingsService.createBillingInfo(
+        userId,
+        createBillingInfoDto,
+      );
+
+      return stripeCustomer;
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Error while trying to create Stripe customer',
+      );
+    }
   }
 
   // Private helpers
@@ -265,7 +330,7 @@ export class PaymentsService {
       await this.usersService.findOrFail(userId, true, ['email'])
     ).email;
 
-    const { stripeCustomerId, fullName } =
+    const { stripeCustomerId, name } =
       await this.billingsService.findBillingInfoByUserId(userId);
 
     // if customerId is defined in local DB/billingInfo
@@ -307,11 +372,7 @@ export class PaymentsService {
       return existingStripeCustomer;
     }
 
-    const customer = await this.createStripeCustomer(
-      fullName,
-      userEmail,
-      userId,
-    );
+    const customer = await this.createStripeCustomer(userId, userEmail, name);
 
     await this.billingsService.updateBillingInfo(userId, {
       stripeCustomerId: customer.id,
@@ -342,29 +403,6 @@ export class PaymentsService {
       }
 
       return null;
-    }
-  }
-
-  private async createStripeCustomer(
-    name: string,
-    email: string,
-    userId: string,
-  ): Promise<Stripe.Customer> {
-    const idempotencyKey = `create-customer-user-${userId}`;
-
-    try {
-      return await this.stripe.customers.create(
-        {
-          email: email,
-          name: name,
-          metadata: { userId },
-        },
-        { idempotencyKey },
-      );
-    } catch (error) {
-      throw new InternalServerErrorException(
-        'Error while trying to create Stripe customer',
-      );
     }
   }
 

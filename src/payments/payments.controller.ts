@@ -6,6 +6,7 @@ import {
   Query,
   UseGuards,
   Controller,
+  Param,
 } from '@nestjs/common';
 
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth-guard';
@@ -17,13 +18,17 @@ import { CheckoutSessionResponseDto } from './dto/checkout-session-response.dto'
 import { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
 import { CreateCustomerPortalDto } from './dto/create-customer-portal.dto';
 import { SessionStatusDto } from './dto/session-status.dto';
+import { UsersService } from 'src/users/users.service';
 
 @Controller('payments')
 export class PaymentsController {
-  constructor(private readonly paymentsService: PaymentsService) {}
+  constructor(
+    private readonly paymentsService: PaymentsService,
+    private readonly usersService: UsersService,
+  ) {}
 
-  @Post('create-checkout-session')
   @UseGuards(JwtAuthGuard)
+  @Post('create-checkout-session')
   async createCheckoutSession(
     @Body() createSessionDto: CreateCheckoutSessionDto,
     @Req() req: AuthRequest,
@@ -35,8 +40,8 @@ export class PaymentsController {
     );
   }
 
-  @Get('session-status')
   @UseGuards(JwtAuthGuard)
+  @Get('session-status')
   async getSessionStatus(
     @Query('session_id') sessionId: string,
     @Req() req: AuthRequest,
@@ -45,8 +50,8 @@ export class PaymentsController {
     return this.paymentsService.findSessionStatus(sessionId, userId);
   }
 
-  @Post('create-customer-portal')
   @UseGuards(JwtAuthGuard)
+  @Post('create-customer-portal')
   async createCustomerPortal(
     @Body() portalDto: CreateCustomerPortalDto,
     @Req() req: AuthRequest,
@@ -56,5 +61,12 @@ export class PaymentsController {
       userId,
       portalDto.returnUrl,
     );
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('stripe-customer/:userId')
+  async createStripeCustomer(@Param('userId') userId: string) {
+    const userEmail = await this.usersService.findUserEmail(userId);
+    return await this.paymentsService.createStripeCustomer(userId, userEmail);
   }
 }
