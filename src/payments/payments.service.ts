@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
-import { Repository } from 'typeorm';
+import { Repository, UpdateResult } from 'typeorm';
 
 import { PaymentPeriod } from './enums/payment-period.enum';
 
@@ -27,6 +27,7 @@ import { Payment } from './entities/payment.entity';
 import Stripe from 'stripe';
 import { CreateBillingInfoDto } from 'src/billings/dto/create-billing-info.dto';
 import { CreatePaymentAttemptDto } from './dto/create-payment-attempt.dto';
+import { PaymentAttemptStatus } from './enums/payment-attempt-status.enum';
 
 @Injectable()
 export class PaymentsService {
@@ -49,12 +50,21 @@ export class PaymentsService {
     period: PaymentPeriod,
   ): Promise<CheckoutSessionResponseDto> {
     try {
+      // se eu crio o customer stripe via api antes de direcionar para
+      // a página de checkout, esta parte é desnecessária.
+      // TODO - atualizar isso e garantir q o customer exista antes de chegar nesta etapa
       const customer = await this.findOrCreateStripeCustomer(userId);
       const priceId = this.getPriceIdByPlan(planType, period);
 
+      if (!priceId) {
+        throw new Error('price id not found');
+      }
+
       const paymentAttempt = await this.createPaymentAttempt({
+        // status is set to PENDING by default in entity, no need to set it here
         metadata: {
           userId: userId,
+          // esses dados abaixo são necessários? verificar
           planType: planType,
           period: period,
         },
@@ -68,6 +78,7 @@ export class PaymentsService {
         mode: 'subscription',
         line_items: [
           {
+            // verificar se isso esta certo
             price: priceId,
             quantity: 1,
           },
@@ -81,7 +92,14 @@ export class PaymentsService {
         billing_address_collection: 'required',
       });
 
+      const priceInfo = await this.stripe.prices.retrieve(priceId);
+
       paymentAttempt.stripeSessionId = session.id;
+      // Verificar se isso está certo ou se eu preciso verificar currency_options
+      // (validar currency usada pelo usuario) - melhor fazer o session.retrieve?
+      paymentAttempt.amount = priceInfo.unit_amount ?? undefined;
+      paymentAttempt.currency = priceInfo.currency;
+
       await this.paymentAttemptRepository.save(paymentAttempt);
 
       return {
@@ -119,6 +137,44 @@ export class PaymentsService {
     } catch (error) {
       throw new BadRequestException(
         `Error while trying to get session status: ${error.message}`,
+      );
+    }
+  }
+
+  async createStripeCustomer(
+    userId: string,
+    email: string,
+    name?: string,
+  ): Promise<Stripe.Customer> {
+    const idempotencyKey = `create-customer-user-${userId}`;
+    try {
+      const customerData: Stripe.CustomerCreateParams = {
+        email: email,
+        metadata: { userId },
+      };
+
+      if (name) {
+        customerData.name = name;
+      }
+
+      const stripeCustomer = await this.stripe.customers.create(customerData, {
+        idempotencyKey,
+      });
+
+      const createBillingInfoDto: CreateBillingInfoDto = {
+        stripeCustomerId: stripeCustomer.id,
+        name: name,
+      };
+
+      await this.billingsService.createBillingInfo(
+        userId,
+        createBillingInfoDto,
+      );
+
+      return stripeCustomer;
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Error while trying to create Stripe customer',
       );
     }
   }
@@ -231,14 +287,64 @@ export class PaymentsService {
     }
   }
 
+  // Ao atualizar ambas as funções, verificar onde elas são chamadas
+  // pois já que elas agora tratam erros, o seu uso pode não precisar de verificação
   async updatePaymentAttemptBySessionId(
     sessionId: string,
     updateData: Partial<PaymentAttempt>,
-  ) {
-    return this.paymentAttemptRepository.update(
-      { stripeSessionId: sessionId },
-      updateData,
-    );
+  ): Promise<UpdateResult> {
+    try {
+      const result = await this.paymentAttemptRepository.update(
+        { stripeSessionId: sessionId },
+        updateData,
+      );
+
+      if (result.affected === 0) {
+        throw new NotFoundException(
+          `PaymentAttempt with sessionId ${sessionId} not found`,
+        );
+      }
+
+      return result;
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        'Error while trying to update payment attempt by session ID',
+      );
+    }
+  }
+
+  async findPaymentAttemptByPaymentIntentId(
+    paymentIntentId: string,
+  ): Promise<PaymentAttempt | null> {
+    try {
+      return await this.paymentAttemptRepository.findOne({
+        where: { stripePaymentIntentId: paymentIntentId },
+      });
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Error while trying to find payment attempt by payment intent ID',
+      );
+    }
+  }
+
+  async findPaymentAttemptBySubscriptionId(
+    subscriptionId: string,
+  ): Promise<PaymentAttempt | null> {
+    try {
+      return await this.paymentAttemptRepository
+        .createQueryBuilder('paymentAttempt')
+        .where("paymentAttempt.metadata->>'subscriptionId' = :subscriptionId", {
+          subscriptionId,
+        })
+        .getOne();
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Error while trying to find payment attempt by subscription ID',
+      );
+    }
   }
 
   async updatePaymentAttemptByPaymentIntentId(
@@ -258,14 +364,6 @@ export class PaymentsService {
     return this.paymentAttemptRepository.update(id, updateData);
   }
 
-  async findPaymentAttemptByPaymentIntentId(
-    paymentIntentId: string,
-  ): Promise<PaymentAttempt | null> {
-    return this.paymentAttemptRepository.findOne({
-      where: { stripePaymentIntentId: paymentIntentId },
-    });
-  }
-
   async createPaymentAttempt(
     dto: CreatePaymentAttemptDto,
   ): Promise<PaymentAttempt> {
@@ -282,44 +380,6 @@ export class PaymentsService {
   async createPayment(dto: CreatePaymentDto): Promise<Payment> {
     const payment = this.paymentRepository.create(dto);
     return this.paymentRepository.save(payment);
-  }
-
-  async createStripeCustomer(
-    userId: string,
-    email: string,
-    name?: string,
-  ): Promise<Stripe.Customer> {
-    const idempotencyKey = `create-customer-user-${userId}`;
-    try {
-      const customerData: Stripe.CustomerCreateParams = {
-        email: email,
-        metadata: { userId },
-      };
-
-      if (name) {
-        customerData.name = name;
-      }
-
-      const stripeCustomer = await this.stripe.customers.create(customerData, {
-        idempotencyKey,
-      });
-
-      const createBillingInfoDto: CreateBillingInfoDto = {
-        stripeCustomerId: stripeCustomer.id,
-        name: name,
-      };
-
-      await this.billingsService.createBillingInfo(
-        userId,
-        createBillingInfoDto,
-      );
-
-      return stripeCustomer;
-    } catch (error) {
-      throw new InternalServerErrorException(
-        'Error while trying to create Stripe customer',
-      );
-    }
   }
 
   // Private helpers

@@ -1,4 +1,8 @@
-import { Inject, Injectable } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
@@ -47,8 +51,7 @@ export class WebhooksService {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
         const userId = session.metadata?.userId;
-        const fullName = session.customer_details?.name;
-        const paymentIntentId = session.payment_intent;
+        const name = session.customer_details?.name;
 
         if (!userId) {
           throw new Error('userId not defined in stripe session metadata');
@@ -56,8 +59,8 @@ export class WebhooksService {
 
         const updateData: UpdateBillingInfoDto = {};
 
-        if (fullName) {
-          updateData.fullName = fullName;
+        if (name) {
+          updateData.name = name;
         }
 
         if (session.currency) {
@@ -68,25 +71,32 @@ export class WebhooksService {
           await this.billingsService.updateBillingInfo(userId, updateData);
         }
 
-        if (paymentIntentId) {
-          await this.paymentsService.updatePaymentAttemptBySessionId(
-            session.id,
-            {
-              status: PaymentAttemptStatus.PROCESSING,
-              stripePaymentIntentId: paymentIntentId as string,
-            },
-          );
-        } else {
-          await this.paymentsService.updatePaymentAttemptBySessionId(
-            session.id,
-            {
-              status: PaymentAttemptStatus.PROCESSING,
-            },
-          );
-        }
+        await this.paymentsService.updatePaymentAttemptBySessionId(session.id, {
+          status: PaymentAttemptStatus.PROCESSING,
+          metadata: {
+            subscriptionId: session.subscription, // necessário? avaliar depois
+          },
+        });
+
+        const billingInfo =
+          await this.billingsService.findBillingInfoByUserId(userId);
+
+        const invoice: CreateInvoiceDto = {
+          userId,
+          billingInfoId: billingInfo.id,
+          amount: 0, // Verificar depois (amount do invoice pode ser 0?)
+          currency: '', // Verificar depois (currencry pode ser string vazia?)
+          type: InvoiceType.SUBSCRIPTION,
+        };
+
+        if (session.amount_total) invoice.amount = session.amount_total;
+        if (session.currency) invoice.currency = session.currency;
+
+        await this.billingsService.createInvoice(invoice);
+
         break;
       }
-      case 'checkout.session.expired': {
+      case 'checkout.session.expired': /*ver se está no fluxo*/ {
         const sessionId = event.data.object.id;
 
         await this.paymentsService.updatePaymentAttemptBySessionId(sessionId, {
@@ -99,7 +109,7 @@ export class WebhooksService {
         const stripeSubscription = event.data.object;
         const customerId = stripeSubscription.customer as string;
 
-        const priceId = stripeSubscription.items.data[0].price.id;
+        const priceId = stripeSubscription.items.data[0].price.id; // pq eu pego o price ID?
         const plan = await this.plansService.findByStripePriceId(priceId);
 
         const billingInfo =
@@ -295,7 +305,6 @@ export class WebhooksService {
 
         break;
       }
-
       case 'invoice.created': {
         const stripeInvoice = event.data.object as Stripe.Invoice;
         const customerId = stripeInvoice.customer as string;
@@ -345,6 +354,49 @@ export class WebhooksService {
             );
           }
         }
+
+        break;
+      }
+
+      // liberar pro full
+      case 'invoice.paid': {
+        // const invoice = event.data.object;
+        // const subscriptionId = invoice.subscription;
+        // const paymentIntentId = invoice.payment_intent;
+
+        // try {
+        //   if (!subscriptionId) {
+        //     console.warn(
+        //       'Invoice paid event without subscription ID:',
+        //       invoice.id,
+        //     );
+        //     break;
+        //   }
+
+        //   const paymentAttempt =
+        //     await this.paymentsService.findPaymentAttemptBySubscriptionId(
+        //       subscriptionId,
+        //     );
+
+        //   if (!paymentAttempt) {
+        //     console.warn(
+        //       `PaymentAttempt not found for subscription ID: ${subscriptionId}`,
+        //     );
+        //     break;
+        //   }
+
+        //   await this.paymentsService.updatePaymentAttemptById(
+        //     paymentAttempt.id,
+        //     {
+        //       stripePaymentIntentId: paymentIntentId,
+        //       status: PaymentAttemptStatus.SUCCEEDED,
+        //     },
+        //   );
+        // } catch (error) {
+        //   throw new InternalServerErrorException(
+        //     'Failed to process invoice.paid webhook',
+        //   );
+        // }
 
         break;
       }

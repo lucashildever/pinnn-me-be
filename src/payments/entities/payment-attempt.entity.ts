@@ -14,6 +14,8 @@ import { PaymentAttemptStatus } from '../enums/payment-attempt-status.enum';
 
 @Entity('payment_attempts')
 export class PaymentAttempt extends TimestampEntity {
+  // avaliar adicionar coluna "failure_reason"
+
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -22,9 +24,6 @@ export class PaymentAttempt extends TimestampEntity {
 
   @Column({ nullable: true, unique: true })
   stripePaymentIntentId?: string;
-
-  @Column({ nullable: true })
-  stripeChargeId?: string;
 
   @Column('decimal', { precision: 10, scale: 2, nullable: true })
   amount?: number;

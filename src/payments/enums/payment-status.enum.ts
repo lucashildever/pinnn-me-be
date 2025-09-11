@@ -1,6 +1,6 @@
 export enum PaymentStatus {
-  SUCCEEDED = 'SUCCEEDED',
-  REFUNDED = 'REFUNDED',
-  PARTIALLY_REFUNDED = 'PARTIALLY_REFUNDED',
-  CHARGEBACK = 'CHARGEBACK',
+  SUCCEEDED = 'succeeded',
+  REFUNDED = 'refunded',
+  PARTIALLY_REFUNDED = 'partially_refunded',
+  CHARGEBACK = 'chargeback',
 }

@@ -4,4 +4,5 @@ export enum PaymentAttemptStatus {
   SUCCEEDED = 'succeeded', // Payment confirmed
   FAILED = 'failed', // Payment failed
   CANCELLED = 'cancelled', // Session cancelled/expired
+  // avaliar adicionar status abandoned
 }
