@@ -19,11 +19,13 @@ export class IconConfigValidator {
 
   @ValidateIf((o) => o.type === 'custom')
   @IsUrl()
+  @IsString()
+  @IsNotEmpty()
   url?: string;
 
   @ValidateIf((o) => o.type === 'emoji')
-  @IsEmoji()
   @IsString()
   @IsNotEmpty()
+  @IsEmoji()
   unicode?: string;
 }
