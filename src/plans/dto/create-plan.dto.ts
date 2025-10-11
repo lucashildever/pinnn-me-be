@@ -8,14 +8,15 @@ import {
   IsNotEmpty,
   ArrayNotEmpty,
 } from 'class-validator';
-import { PlanType } from '../enums/plan-type.enum';
+import { PLAN_TYPES } from '../constants/plan-types.constant';
+import { PlanType } from '../types/plan-type.type';
 
 export class CreatePlanDto {
   @IsString()
   @IsNotEmpty()
   name: string;
 
-  @IsEnum(PlanType)
+  @IsEnum(PLAN_TYPES)
   type: PlanType;
 
   @IsBoolean()

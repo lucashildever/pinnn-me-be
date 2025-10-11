@@ -1,8 +1,4 @@
-import {
-  Inject,
-  Injectable,
-  InternalServerErrorException,
-} from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
@@ -13,12 +9,6 @@ import { PlansService } from 'src/plans/plans.service';
 import { UpdateBillingInfoDto } from 'src/billings/dto/update-billing-info.dto';
 import { CreateInvoiceDto } from 'src/billings/dto/create-invoice.dto';
 import { CreatePaymentDto } from 'src/payments/dto/create-payment.dto';
-
-import { PaymentAttemptStatus } from 'src/payments/enums/payment-attempt-status.enum';
-import { SubscriptionStatus } from 'src/subscriptions/enums/subscription-status.enum';
-import { PaymentStatus } from 'src/payments/enums/payment-status.enum';
-import { InvoiceStatus } from 'src/billings/enums/invoice-status.enum';
-import { InvoiceType } from 'src/billings/enums/invoice-type.enum';
 
 import Stripe from 'stripe';
 
@@ -72,7 +62,7 @@ export class WebhooksService {
         }
 
         await this.paymentsService.updatePaymentAttemptBySessionId(session.id, {
-          status: PaymentAttemptStatus.PROCESSING,
+          status: 'processing',
           metadata: {
             subscriptionId: session.subscription, // necessário? avaliar depois
           },
@@ -86,7 +76,7 @@ export class WebhooksService {
           billingInfoId: billingInfo.id,
           amount: 0, // Verificar depois (amount do invoice pode ser 0?)
           currency: '', // Verificar depois (currencry pode ser string vazia?)
-          type: InvoiceType.SUBSCRIPTION,
+          type: 'subscription',
         };
 
         if (session.amount_total) invoice.amount = session.amount_total;
@@ -100,7 +90,7 @@ export class WebhooksService {
         const sessionId = event.data.object.id;
 
         await this.paymentsService.updatePaymentAttemptBySessionId(sessionId, {
-          status: PaymentAttemptStatus.CANCELLED,
+          status: 'cancelled',
         });
 
         break;
@@ -133,7 +123,7 @@ export class WebhooksService {
         const subscriptionId = (event.data.object as Stripe.Subscription).id;
 
         await this.subscriptionsService.updateSubscription(subscriptionId, {
-          status: SubscriptionStatus.CANCELLED,
+          status: 'cancelled',
         });
 
         break;
@@ -326,7 +316,7 @@ export class WebhooksService {
           subscriptionId: (stripeInvoice as any).subscription
             ? ((stripeInvoice as any).subscription as string)
             : undefined,
-          type: InvoiceType.SUBSCRIPTION,
+          type: 'subscription',
           amount: stripeInvoice.amount_due / 100,
           currency: stripeInvoice.currency.toUpperCase(),
           stripeInvoiceId: stripeInvoice.id,
@@ -437,7 +427,7 @@ export class WebhooksService {
         const chargeId = (stripeInvoice as any).charge as string;
 
         await this.paymentsService.updatePaymentAttemptById(paymentAttempt.id, {
-          status: PaymentAttemptStatus.SUCCEEDED,
+          status: 'succeeded',
           ...(chargeId && { stripeChargeId: chargeId }),
         });
 
@@ -448,15 +438,12 @@ export class WebhooksService {
           stripeChargeId: chargeId,
           amount: stripeInvoice.amount_paid / 100,
           currency: stripeInvoice.currency?.toUpperCase() || 'BRL',
-          status: PaymentStatus.SUCCEEDED,
+          status: 'succeeded',
         };
 
         await this.paymentsService.createPayment(createPaymentDto);
 
-        await this.billingsService.updateInvoiceStatus(
-          invoice.id,
-          InvoiceStatus.COMPLETED,
-        );
+        await this.billingsService.updateInvoiceStatus(invoice.id, 'completed');
 
         break;
       }
@@ -466,7 +453,7 @@ export class WebhooksService {
 
         if (subscriptionId) {
           await this.subscriptionsService.updateSubscription(subscriptionId, {
-            status: SubscriptionStatus.CANCELLED,
+            status: 'cancelled',
           });
         }
 
@@ -476,7 +463,7 @@ export class WebhooksService {
           await this.paymentsService.updatePaymentAttemptByPaymentIntentId(
             paymentIntentId,
             {
-              status: PaymentAttemptStatus.FAILED,
+              status: 'failed',
             },
           );
         }

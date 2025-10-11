@@ -8,8 +8,6 @@ import { Repository } from 'typeorm';
 
 import { Subscription } from './entities/subscription.entity';
 
-import { SubscriptionStatus } from './enums/subscription-status.enum';
-
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
 
@@ -34,7 +32,7 @@ export class SubscriptionsService {
     const subscription = this.subscriptionsRepository.create({
       userId: createDto.userId,
       planId: planId,
-      status: SubscriptionStatus.ACTIVE,
+      status: 'active',
       startAt: createDto.startAt || new Date(),
       currentPeriodEnd: createDto.currentPeriodEnd,
       stripeSubscriptionId: createDto.stripeSubscriptionId,
@@ -46,10 +44,7 @@ export class SubscriptionsService {
   async findUserActiveSubscription(
     userId: string,
   ): Promise<Subscription | null> {
-    const activeStatuses = [
-      SubscriptionStatus.ACTIVE,
-      SubscriptionStatus.PAST_DUE,
-    ];
+    const activeStatuses = ['active', 'past-due'];
 
     return this.subscriptionsRepository
       .createQueryBuilder('subscription')
@@ -118,14 +113,14 @@ export class SubscriptionsService {
     periodEnd?: Date,
   ): Promise<Subscription> {
     return this.updateSubscription(id, {
-      status: SubscriptionStatus.ACTIVE,
+      status: 'active',
       currentPeriodEnd: periodEnd,
     });
   }
 
   async cancelSubscription(id: string): Promise<Subscription> {
     return this.updateSubscription(id, {
-      status: SubscriptionStatus.CANCELLED,
+      status: 'cancelled',
     });
   }
 
@@ -134,7 +129,7 @@ export class SubscriptionsService {
     newPeriodEnd.setMonth(newPeriodEnd.getMonth() + 1); // +1 month
 
     return this.updateSubscription(id, {
-      status: SubscriptionStatus.ACTIVE,
+      status: 'active',
       currentPeriodEnd: newPeriodEnd,
     });
   }
@@ -176,7 +171,7 @@ export class SubscriptionsService {
       .leftJoinAndSelect('subscription.plan', 'plan')
       .leftJoinAndSelect('subscription.user', 'user')
       .where('subscription.status = :status', {
-        status: SubscriptionStatus.ACTIVE,
+        status: 'active',
       })
       .andWhere('subscription.currentPeriodEnd <= :futureDate', { futureDate })
       .andWhere('subscription.currentPeriodEnd > :now', { now: new Date() })
@@ -189,9 +184,9 @@ export class SubscriptionsService {
     const result = await this.subscriptionsRepository
       .createQueryBuilder()
       .update(Subscription)
-      .set({ status: SubscriptionStatus.EXPIRED })
+      .set({ status: 'expired' })
       .where('status = :activeStatus', {
-        activeStatus: SubscriptionStatus.ACTIVE,
+        activeStatus: 'active',
       })
       .andWhere('currentPeriodEnd <= :now', { now })
       .execute();
@@ -200,16 +195,13 @@ export class SubscriptionsService {
   }
 
   private async cancelUserActiveSubscriptions(userId: string): Promise<void> {
-    const activeStatuses = [
-      SubscriptionStatus.ACTIVE,
-      SubscriptionStatus.PAST_DUE,
-    ];
+    const activeStatuses = ['active', 'past-due'];
 
     await this.subscriptionsRepository
       .createQueryBuilder()
       .update(Subscription)
       .set({
-        status: SubscriptionStatus.CANCELLED,
+        status: 'cancelled',
       })
       .where('userId = :userId', { userId })
       .andWhere('status IN (:...statuses)', { statuses: activeStatuses })
@@ -256,7 +248,7 @@ export class SubscriptionsService {
     newPeriodEnd.setMonth(newPeriodEnd.getMonth() + periodInMonths);
 
     return this.updateSubscription(id, {
-      status: SubscriptionStatus.ACTIVE,
+      status: 'active',
       currentPeriodEnd: newPeriodEnd,
     });
   }

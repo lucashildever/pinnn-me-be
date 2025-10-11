@@ -4,7 +4,7 @@ import {
   BadRequestException,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, FindOptionsWhere, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 
 import { CredentialsService } from 'src/credentials/credentials.service';
@@ -19,8 +19,6 @@ import { DeleteUserDto } from './dto/delete-user.dto';
 import { EmailAlreadyExistsException } from '../auth/exceptions/email-already-exists.exception';
 
 import { UserEntity } from './entities/user.entity';
-
-import { Status } from 'src/common/enums/status.enum';
 
 @Injectable()
 export class UsersService {
@@ -143,7 +141,7 @@ export class UsersService {
   ): Promise<{ message: string }> {
     const user = await this.findOrFail(userId, true, ['password', 'email']);
 
-    if (user.status === Status.Deleted) {
+    if (user.status === 'deleted') {
       throw new BadRequestException('User is already deleted');
     }
 
@@ -154,7 +152,7 @@ export class UsersService {
 
     const result = await this.usersRepository.update(
       { id: userId },
-      { status: Status.Deleted },
+      { status: 'deleted' },
     );
 
     if (result.affected === 0) {
@@ -209,16 +207,18 @@ export class UsersService {
 
     const whereCondition = {
       ...(isEmail ? { email: identifier } : { id: identifier }),
-      ...(onlyActive ? { status: Status.Active } : {}),
+      ...(onlyActive ? { status: 'active' } : {}),
     };
 
     if (selectFields) {
       user = await this.usersRepository.findOne({
-        where: whereCondition,
+        where: whereCondition as FindOptionsWhere<UserEntity>,
         select: selectFields as (keyof UserEntity)[],
       });
     } else {
-      user = await this.usersRepository.findOneBy(whereCondition);
+      user = await this.usersRepository.findOneBy(
+        whereCondition as FindOptionsWhere<UserEntity>,
+      );
     }
 
     if (!user) {

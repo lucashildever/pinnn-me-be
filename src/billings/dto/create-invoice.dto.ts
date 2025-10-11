@@ -8,8 +8,10 @@ import {
   IsNotEmpty,
 } from 'class-validator';
 
-import { InvoiceType } from '../enums/invoice-type.enum';
-import { PlanType } from 'src/plans/enums/plan-type.enum';
+import { INVOICE_TYPES } from '../constants/invoice-types.constant';
+import { InvoiceType } from '../types/invoice-type.type';
+import { PLAN_TYPES } from 'src/plans/constants/plan-types.constant';
+import { PlanType } from 'src/plans/types/plan-type.type';
 
 export class CreateInvoiceDto {
   @IsUUID()
@@ -22,7 +24,7 @@ export class CreateInvoiceDto {
   @IsUUID()
   subscriptionId?: string;
 
-  @IsEnum(InvoiceType)
+  @IsEnum(INVOICE_TYPES)
   type: InvoiceType;
 
   @IsNumber({ maxDecimalPlaces: 2 })
@@ -46,7 +48,7 @@ export class CreateInvoiceDto {
   planName?: string;
 
   @IsOptional()
-  @IsEnum(PlanType)
+  @IsEnum(PLAN_TYPES)
   planType?: PlanType;
 
   @IsOptional()

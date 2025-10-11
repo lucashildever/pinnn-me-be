@@ -12,7 +12,8 @@ import { DisplayElementEntity } from 'src/common/entities/display-element.entity
 import { TimestampEntity } from 'src/common/entities/timestamp.entity';
 import { MuralEntity } from '../../murals/entities/mural.entity';
 import { PinEntity } from 'src/pins/entities/pin.entity';
-import { Status } from 'src/common/enums/status.enum';
+import { STATUSES } from 'src/common/constants/statuses.constant';
+import { Status } from 'src/common/types/status.type';
 
 @Entity('collections')
 export class CollectionEntity extends TimestampEntity {
@@ -51,8 +52,8 @@ export class CollectionEntity extends TimestampEntity {
 
   @Column({
     type: 'enum',
-    enum: Status,
-    default: Status.Active,
+    enum: STATUSES,
+    default: 'active',
   })
   status: Status;
 

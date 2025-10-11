@@ -22,9 +22,8 @@ import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth-guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
-import { Role } from 'src/auth/enums/role.enum';
 
-import { InvoiceStatus } from './enums/invoice-status.enum';
+import { InvoiceStatus } from './types/invoice-status.type';
 
 @ApiTags('Billings')
 @Controller('billings')
@@ -76,7 +75,7 @@ export class BillingsController {
 
   @Put('invoices/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @Roles('admin', 'super-admin')
   @ApiOperation({ summary: 'Update invoice status' })
   async updateInvoice(@Param('id') id: string, @Body() dto: UpdateInvoiceDto) {
     return this.billingsService.updateInvoice(id, dto);
@@ -114,7 +113,7 @@ export class BillingsController {
   // Admin endpoints
   @Get('invoices/status/:status')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @Roles('admin', 'super-admin')
   @ApiOperation({ summary: 'Get invoices by status (admin)' })
   async getInvoicesByStatus(
     @Param('status') status: InvoiceStatus,

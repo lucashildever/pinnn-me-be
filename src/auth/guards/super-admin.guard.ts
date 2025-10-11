@@ -4,7 +4,6 @@ import {
   ExecutionContext,
   ForbiddenException,
 } from '@nestjs/common';
-import { Role } from '../enums/role.enum';
 
 @Injectable()
 export class SuperAdminGuard implements CanActivate {
@@ -16,7 +15,7 @@ export class SuperAdminGuard implements CanActivate {
       throw new ForbiddenException('User not authenticated');
     }
 
-    if (user.role !== Role.SUPER_ADMIN) {
+    if (user.role !== 'super-admin') {
       throw new ForbiddenException(
         'Access denied. Only SUPER_ADMIN can have access to this functionality.',
       );

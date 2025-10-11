@@ -1,6 +1,7 @@
 import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
 import { TimestampEntity } from 'src/common/entities/timestamp.entity';
-import { PlanType } from '../enums/plan-type.enum';
+import { PLAN_TYPES } from '../constants/plan-types.constant';
+import { PlanType } from '../types/plan-type.type';
 
 @Entity('plans')
 export class Plan extends TimestampEntity {
@@ -12,7 +13,7 @@ export class Plan extends TimestampEntity {
 
   @Column({
     type: 'enum',
-    enum: PlanType,
+    enum: PLAN_TYPES,
     unique: true,
   })
   type: PlanType;

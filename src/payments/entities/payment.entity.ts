@@ -11,7 +11,8 @@ import { TimestampEntity } from 'src/common/entities/timestamp.entity';
 import { PaymentAttempt } from './payment-attempt.entity';
 import { Invoice } from 'src/billings/entities/invoice.entity';
 
-import { PaymentStatus } from '../enums/payment-status.enum';
+import { PAYMENT_STATUSES } from '../constants/payment-statuses.constant';
+import { PaymentStatus } from '../types/payment-status.type';
 
 @Entity('payments')
 export class Payment extends TimestampEntity {
@@ -32,8 +33,8 @@ export class Payment extends TimestampEntity {
 
   @Column({
     type: 'enum',
-    enum: PaymentStatus,
-    default: PaymentStatus.SUCCEEDED,
+    enum: PAYMENT_STATUSES,
+    default: 'succeeded',
   })
   status: PaymentStatus;
 

@@ -6,7 +6,7 @@ import {
   ValidateIf,
   IsNotEmpty,
 } from 'class-validator';
-import { PredefinedIcon } from 'src/common/enums/predefined-icon.enum';
+import { AppIcon, ICONS } from '../types/icon.types';
 import { IsEmoji } from '../../collections/validators/is-emoji.validator';
 
 export class IconConfigValidator {
@@ -14,8 +14,8 @@ export class IconConfigValidator {
   type: string;
 
   @ValidateIf((o) => o.type === 'predefined')
-  @IsEnum(PredefinedIcon)
-  icon?: PredefinedIcon;
+  @IsEnum(ICONS)
+  icon?: AppIcon;
 
   @ValidateIf((o) => o.type === 'custom')
   @IsUrl()

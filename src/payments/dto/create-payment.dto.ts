@@ -6,7 +6,8 @@ import {
   IsNumber,
   IsOptional,
 } from 'class-validator';
-import { PaymentStatus } from '../enums/payment-status.enum';
+import { PAYMENT_STATUSES } from '../constants/payment-statuses.constant';
+import { PaymentStatus } from '../types/payment-status.type';
 
 export class CreatePaymentDto {
   @IsUUID()
@@ -32,7 +33,7 @@ export class CreatePaymentDto {
   @IsString()
   currency?: string;
 
-  @IsEnum(PaymentStatus)
+  @IsEnum(PAYMENT_STATUSES)
   status: PaymentStatus;
 
   @IsOptional()

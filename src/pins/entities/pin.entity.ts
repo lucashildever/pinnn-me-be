@@ -10,7 +10,8 @@ import {
 import { TimestampEntity } from 'src/common/entities/timestamp.entity';
 import { CollectionEntity } from 'src/collections/entities/collection.entity';
 import { CardEntity } from './card.entity';
-import { Status } from 'src/common/enums/status.enum';
+import { STATUSES } from 'src/common/constants/statuses.constant';
+import { Status } from 'src/common/types/status.type';
 
 @Entity('pins')
 export class PinEntity extends TimestampEntity {
@@ -41,8 +42,8 @@ export class PinEntity extends TimestampEntity {
 
   @Column({
     type: 'enum',
-    enum: Status,
-    default: Status.Active,
+    enum: STATUSES,
+    default: 'active',
   })
   status: Status;
 

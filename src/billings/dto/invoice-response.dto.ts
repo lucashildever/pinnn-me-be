@@ -1,6 +1,6 @@
-import { InvoiceStatus } from '../enums/invoice-status.enum';
-import { InvoiceType } from '../enums/invoice-type.enum';
-import { PlanType } from 'src/plans/enums/plan-type.enum';
+import { InvoiceStatus } from '../types/invoice-status.type';
+import { InvoiceType } from '../types/invoice-type.type';
+import { PlanType } from 'src/plans/types/plan-type.type';
 
 export class InvoiceResponseDto {
   id: string;

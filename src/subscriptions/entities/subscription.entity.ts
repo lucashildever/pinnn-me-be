@@ -10,8 +10,8 @@ import { TimestampEntity } from 'src/common/entities/timestamp.entity';
 import { UserEntity } from 'src/users/entities/user.entity';
 import { Plan } from 'src/plans/entities/plan.entity';
 
-import { SubscriptionStatus } from '../enums/subscription-status.enum';
-import { PlanType } from 'src/plans/enums/plan-type.enum';
+import { SUBSCRIPTION_STATUSES } from '../constants/subscription-status.constant';
+import { SubscriptionStatus } from '../types/subscription-status.type';
 
 @Entity('subscriptions')
 export class Subscription extends TimestampEntity {
@@ -34,10 +34,10 @@ export class Subscription extends TimestampEntity {
 
   @Column({
     type: 'enum',
-    enum: SubscriptionStatus,
+    enum: SUBSCRIPTION_STATUSES,
     // subscription registration created only when
     // the user paid, so it goes straight to active
-    default: SubscriptionStatus.ACTIVE,
+    default: 'active',
   })
   status: SubscriptionStatus;
 
@@ -52,7 +52,7 @@ export class Subscription extends TimestampEntity {
 
   // Métodos essenciais para MVP
   isActive(): boolean {
-    return this.status === SubscriptionStatus.ACTIVE && !this.isExpired();
+    return this.status === 'active' && !this.isExpired();
   }
 
   isExpired(): boolean {
@@ -61,9 +61,7 @@ export class Subscription extends TimestampEntity {
   }
 
   isCancelled(): boolean {
-    return [SubscriptionStatus.CANCELLED, SubscriptionStatus.EXPIRED].includes(
-      this.status,
-    );
+    return ['cancelled', 'expired'].includes(this.status);
   }
 
   hasValidAccess(): boolean {
@@ -86,6 +84,6 @@ export class Subscription extends TimestampEntity {
   isPro(): boolean {
     if (!this.plan) return false;
 
-    return this.plan.type === PlanType.PRO;
+    return this.plan.type === 'pro';
   }
 }

@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { FindOptionsWhere, Repository } from 'typeorm';
 
 import { UpdateMuralResponseDto } from './dto/update-mural-response.dto';
 import { MuralResponseDto } from './dto/mural-response.dto';
@@ -20,11 +20,9 @@ import { UsersService } from 'src/users/users.service';
 import { PinsService } from 'src/pins/pins.service';
 
 import { MuralEntity } from './entities/mural.entity';
-import { Status } from 'src/common/enums/status.enum';
 import { CallToActionDto } from './dto/call-to-action/call-to-action.dto';
 import { CallToActionEntity } from './entities/call-to-action.entity';
 import { DisplayElementEntity } from 'src/common/entities/display-element.entity';
-import { IconType } from 'src/common/enums/icon-type.enum';
 import { UpdateCallToActionDto } from './dto/call-to-action/update-call-to-action.dto';
 import { CreateCallToActionDto } from './dto/call-to-action/create-call-to-action.dto';
 
@@ -141,7 +139,7 @@ export class MuralsService {
       isMain: true,
       displayElement: {
         content: 'Main Collection',
-        iconConfig: { type: IconType.EMOJI, unicode: '📝' },
+        iconConfig: { type: 'emoji', unicode: '📝' },
       },
     });
 
@@ -224,10 +222,7 @@ export class MuralsService {
       user.password,
     );
 
-    await this.muralsRepository.update(
-      { id: muralId },
-      { status: Status.Deleted },
-    );
+    await this.muralsRepository.update({ id: muralId }, { status: 'deleted' });
 
     await this.cacheService.del(this.MURAL_CACHE_KEY(mural.name, true));
     await this.cacheService.del(this.MURAL_CACHE_KEY(mural.name, false));
@@ -278,18 +273,20 @@ export class MuralsService {
 
     const whereCondition = {
       ...(isUUID ? { id: identifier } : { name: identifier }),
-      ...(onlyActive ? { status: Status.Active } : {}),
+      ...(onlyActive ? { status: 'active' } : {}),
     };
 
     let mural: MuralEntity | null;
 
     if (selectFields) {
       mural = await this.muralsRepository.findOne({
-        where: whereCondition,
+        where: whereCondition as FindOptionsWhere<MuralEntity>,
         select: selectFields as (keyof MuralEntity)[],
       });
     } else {
-      mural = await this.muralsRepository.findOneBy(whereCondition);
+      mural = await this.muralsRepository.findOneBy(
+        whereCondition as FindOptionsWhere<MuralEntity>,
+      );
     }
 
     if (!mural) {

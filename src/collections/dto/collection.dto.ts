@@ -10,7 +10,10 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { DisplayElementDto } from '../../common/dto/display-element.dto';
-import { Status } from 'src/common/enums/status.enum';
+
+import { STATUSES } from 'src/common/constants/statuses.constant';
+import { Status } from 'src/common/types/status.type';
+
 import { Type } from 'class-transformer';
 
 export class CollectionDto {
@@ -28,8 +31,8 @@ export class CollectionDto {
   @MaxLength(10)
   order: string;
 
-  @IsEnum(Status)
-  status: Status = Status.Active;
+  @IsEnum(STATUSES)
+  status: Status = 'active';
 
   @IsBoolean()
   isMain: boolean = false;

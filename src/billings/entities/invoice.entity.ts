@@ -14,9 +14,12 @@ import { BillingInfo } from './billing-info.entity';
 import { UserEntity } from 'src/users/entities/user.entity';
 import { Payment } from 'src/payments/entities/payment.entity';
 
-import { InvoiceStatus } from '../enums/invoice-status.enum';
-import { InvoiceType } from '../enums/invoice-type.enum';
-import { PlanType } from 'src/plans/enums/plan-type.enum';
+import { INVOICE_STATUSES } from '../constants/invoice-status.constant';
+import { InvoiceStatus } from '../types/invoice-status.type';
+import { INVOICE_TYPES } from '../constants/invoice-types.constant';
+import { InvoiceType } from '../types/invoice-type.type';
+import { PlanType } from 'src/plans/types/plan-type.type';
+import { PLAN_TYPES } from 'src/plans/constants/plan-types.constant';
 
 @Entity('invoices')
 export class Invoice extends TimestampEntity {
@@ -52,14 +55,14 @@ export class Invoice extends TimestampEntity {
 
   @Column({
     type: 'enum',
-    enum: InvoiceType,
+    enum: INVOICE_TYPES,
   })
   type: InvoiceType;
 
   @Column({
     type: 'enum',
-    enum: InvoiceStatus,
-    default: InvoiceStatus.PENDING,
+    enum: INVOICE_STATUSES,
+    default: 'pending',
   })
   status: InvoiceStatus;
 
@@ -80,7 +83,7 @@ export class Invoice extends TimestampEntity {
 
   @Column({
     type: 'enum',
-    enum: PlanType,
+    enum: PLAN_TYPES,
     nullable: true,
   })
   planType?: PlanType;

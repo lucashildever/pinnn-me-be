@@ -11,7 +11,7 @@ import { PinsService } from './pins.service';
 
 import { PaginationQueryDto } from './dto/pagination/pagination-query.dto';
 
-import { Status } from '../common/enums/status.enum';
+import { Status } from '../common/constants/statuses.constant';
 
 describe('PinsService', () => {
   let service: PinsService;

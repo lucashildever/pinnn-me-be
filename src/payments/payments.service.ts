@@ -10,8 +10,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import { Repository, UpdateResult } from 'typeorm';
 
-import { PaymentPeriod } from './enums/payment-period.enum';
-
 import { BillingsService } from 'src/billings/billings.service';
 import { UsersService } from 'src/users/users.service';
 
@@ -24,10 +22,11 @@ import { CreatePaymentDto } from './dto/create-payment.dto';
 import { PaymentAttempt } from './entities/payment-attempt.entity';
 import { Payment } from './entities/payment.entity';
 
-import Stripe from 'stripe';
-import { CreateBillingInfoDto } from 'src/billings/dto/create-billing-info.dto';
 import { CreatePaymentAttemptDto } from './dto/create-payment-attempt.dto';
-import { PaymentAttemptStatus } from './enums/payment-attempt-status.enum';
+import { CreateBillingInfoDto } from 'src/billings/dto/create-billing-info.dto';
+import { PaymentPeriod } from './types/payment-period.type';
+
+import Stripe from 'stripe';
 
 @Injectable()
 export class PaymentsService {

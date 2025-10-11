@@ -7,9 +7,6 @@ import { Plan } from './entities/plan.entity';
 import { PlanResponseDto } from './dto/plan-response.dto';
 import { CreatePlanDto } from './dto/create-plan.dto';
 
-import { PlanStatus } from './enums/plan-status.enum';
-import { PlanType } from './enums/plan-type.enum';
-
 @Injectable()
 export class PlansService {
   constructor(
@@ -18,7 +15,7 @@ export class PlansService {
   ) {}
 
   async createPlan(createPlanDto: CreatePlanDto): Promise<PlanResponseDto> {
-    if (createPlanDto.type === PlanType.PRO) {
+    if (createPlanDto.type === 'pro') {
       if (
         !createPlanDto.monthlyStripePriceId &&
         !createPlanDto.yearlyStripePriceId
@@ -65,7 +62,7 @@ export class PlansService {
   async findByIdOrFail(id: string, active: boolean): Promise<PlanResponseDto> {
     const where: any = { id };
     if (active) {
-      where.status = PlanStatus.ACTIVE;
+      where.status = 'active';
     }
 
     const plan = await this.plansRepository.findOne({
@@ -87,7 +84,7 @@ export class PlansService {
     const where: any = { name };
 
     if (active) {
-      where.status = PlanStatus.ACTIVE;
+      where.status = 'active';
     }
 
     const plan = await this.plansRepository.findOne({

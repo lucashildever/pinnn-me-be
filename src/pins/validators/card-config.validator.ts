@@ -5,33 +5,32 @@ import {
   ValidateIf,
   IsNotEmpty,
   ValidateNested,
-  IsOptional,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
 import { IconConfigValidator } from 'src/common/validators/icon-config.validator';
 
-import { CardVariant } from '../enums/card-variant.enum';
 import { IconConfig } from 'src/common/types/icon-config.type';
 
+import { CARD_VARIANTS } from '../constants/card-variant.constant';
+import { CardVariant } from '../types/card-variant.type';
+
 export class CardConfigValidator {
-  @IsEnum(CardVariant)
+  @IsEnum(CARD_VARIANTS)
   variant: CardVariant;
 
-  @ValidateIf((o) => o.variant === CardVariant.IMAGE)
+  @ValidateIf((o) => o.variant === 'image')
   @IsUrl()
   @IsString()
   @IsNotEmpty()
   src?: string;
 
-  @ValidateIf(
-    (o) => o.variant === CardVariant.LINK || o.variant === CardVariant.DOWNLOAD,
-  )
+  @ValidateIf((o) => o.variant === 'link' || o.variant === 'download')
   @ValidateNested()
   @Type(() => IconConfigValidator)
   iconConfig?: IconConfig;
 
-  @ValidateIf((o) => o.variant === CardVariant.LINK)
+  @ValidateIf((o) => o.variant === 'link')
   @IsUrl()
   @IsString()
   @IsNotEmpty()

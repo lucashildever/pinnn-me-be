@@ -7,7 +7,6 @@ import { JwtAuthGuard } from 'src/auth/guards/jwt-auth-guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 
 import { Roles } from 'src/auth/decorators/roles.decorator';
-import { Role } from 'src/auth/enums/role.enum';
 
 import { PlanResponseDto } from './dto/plan-response.dto';
 import { CreatePlanDto } from './dto/create-plan.dto';
@@ -40,7 +39,7 @@ export class PlansController {
 
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @Roles('admin', 'super-admin')
   @ApiOperation({ summary: 'Get all plans (Admin access)' })
   @ApiResponse({
     status: 200,
@@ -58,7 +57,7 @@ export class PlansController {
 
   @Get(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @Roles('admin', 'super-admin')
   @ApiOperation({ summary: 'Get plan by ID (Admin access)' })
   @ApiParam({ name: 'id', description: 'Plan ID' })
   @ApiResponse({
@@ -78,7 +77,7 @@ export class PlansController {
 
   @Get('name/:name')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @Roles('admin', 'super-admin')
   @ApiOperation({ summary: 'Get plan by name (Admin access)' })
   @ApiParam({ name: 'name', description: 'Plan name' })
   @ApiResponse({

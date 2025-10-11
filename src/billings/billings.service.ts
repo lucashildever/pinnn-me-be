@@ -15,8 +15,7 @@ import { CreateBillingInfoDto } from './dto/create-billing-info.dto';
 import { InvoiceResponseDto } from './dto/invoice-response.dto';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
-
-import { InvoiceStatus } from './enums/invoice-status.enum';
+import { InvoiceStatus } from './types/invoice-status.type';
 
 @Injectable()
 export class BillingsService {
@@ -179,7 +178,7 @@ export class BillingsService {
       this.invoiceRepository.count({
         where: {
           billingInfoId: billingInfo.id,
-          status: InvoiceStatus.COMPLETED,
+          status: 'completed',
         },
       }),
       this.invoiceRepository
@@ -189,7 +188,7 @@ export class BillingsService {
           billingInfoId: billingInfo.id,
         })
         .andWhere('transaction.status = :status', {
-          status: InvoiceStatus.COMPLETED,
+          status: 'completed',
         })
         .getRawOne(),
     ]);

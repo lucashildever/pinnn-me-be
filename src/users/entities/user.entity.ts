@@ -11,8 +11,11 @@ import { Subscription } from 'src/subscriptions/entities/subscription.entity';
 import { MuralEntity } from 'src/murals/entities/mural.entity';
 import { Invoice } from 'src/billings/entities/invoice.entity';
 
-import { Status } from 'src/common/enums/status.enum';
-import { Role } from '../../auth/enums/role.enum';
+import { ROLES } from '../../auth/constants/roles.constant';
+import { Role } from '../../auth/types/role.type';
+
+import { STATUSES } from 'src/common/constants/statuses.constant';
+import { Status } from 'src/common/types/status.type';
 
 @Entity('users')
 export class UserEntity extends TimestampEntity {
@@ -52,15 +55,15 @@ export class UserEntity extends TimestampEntity {
 
   @Column({
     type: 'enum',
-    enum: Role,
-    default: Role.USER,
+    enum: ROLES,
+    default: 'user',
   })
   role: Role;
 
   @Column({
     type: 'enum',
-    enum: Status,
-    default: Status.Active,
+    enum: STATUSES,
+    default: 'active',
   })
   status: Status;
 
