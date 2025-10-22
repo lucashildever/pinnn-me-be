@@ -1,5 +1,5 @@
 import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
-import { IconConfig } from '../types/icon-config.type';
+import { IconConfigDto } from '../dto/icon-config.dto';
 
 @Entity('display_elements')
 export class DisplayElementEntity {
@@ -19,5 +19,5 @@ export class DisplayElementEntity {
     type: 'json',
     nullable: false,
   })
-  iconConfig: IconConfig;
+  iconConfig: IconConfigDto;
 }

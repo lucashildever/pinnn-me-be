@@ -1,4 +1,1 @@
-export const PAYMENT_PERIODS = {
-  Monthly: 'monthly',
-  Yearly: 'yearly',
-} as const;
+export const PAYMENT_PERIODS = ['monthly', 'yearly'] as const;

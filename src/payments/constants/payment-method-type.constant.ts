@@ -1,4 +1,1 @@
-export const PAYMENT_METHODS = {
-  Card: 'card',
-  Pix: 'pix',
-} as const;
+export const PAYMENT_METHODS = ['card', 'pix'] as const;

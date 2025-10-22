@@ -5,8 +5,10 @@ import {
   JoinColumn,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+
 import { PinEntity } from './pin.entity';
-import { CardConfig } from '../types/card-config.type';
+
+import { CardConfigDto } from '../dto/card/card-config.dto';
 
 @Entity('cards')
 export class CardEntity {
@@ -35,7 +37,7 @@ export class CardEntity {
     type: 'json',
     nullable: false,
   })
-  cardConfig: CardConfig;
+  cardConfig: CardConfigDto;
 
   @Column({
     type: 'varchar',

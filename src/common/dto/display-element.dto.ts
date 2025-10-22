@@ -5,8 +5,8 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { IconConfig } from 'src/common/types/icon-config.type';
-import { IconConfigValidator } from 'src/common/validators/icon-config.validator';
+
+import { IconConfigDto } from './icon-config.dto';
 
 export class DisplayElementDto {
   @MaxLength(15)
@@ -16,6 +16,6 @@ export class DisplayElementDto {
 
   @IsNotEmpty()
   @ValidateNested()
-  @Type(() => IconConfigValidator)
-  iconConfig: IconConfig;
+  @Type(() => IconConfigDto)
+  iconConfig: IconConfigDto;
 }

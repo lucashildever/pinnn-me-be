@@ -8,8 +8,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { CardConfig } from 'src/pins/types/card-config.type';
-import { CardConfigValidator } from 'src/pins/validators/card-config.validator';
+import { CardConfigDto } from './card-config.dto';
 
 export class CardDto {
   @IsUUID()
@@ -32,6 +31,6 @@ export class CardDto {
 
   @IsNotEmpty()
   @ValidateNested()
-  @Type(() => CardConfigValidator)
-  cardConfig: CardConfig;
+  @Type(() => CardConfigDto)
+  cardConfig: CardConfigDto;
 }

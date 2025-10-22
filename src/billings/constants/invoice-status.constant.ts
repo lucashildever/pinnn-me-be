@@ -1,7 +1,7 @@
-export const INVOICE_STATUSES = {
-  Pending: 'pending',
-  Completed: 'completed',
-  Failed: 'failed',
-  Cancelled: 'cancelled',
-  Refunded: 'refunded',
-} as const;
+export const INVOICE_STATUSES = [
+  'pending',
+  'completed',
+  'failed',
+  'cancelled',
+  'refunded',
+] as const;

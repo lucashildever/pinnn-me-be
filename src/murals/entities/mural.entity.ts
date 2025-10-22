@@ -13,10 +13,11 @@ import { CollectionEntity } from '../../collections/entities/collection.entity';
 
 import { CallToActionEntity } from './call-to-action.entity';
 
-import { MURAL_PLANS } from '../constants/mural-plan.constant';
-import { MuralPlan } from '../types/mural-plan.type';
 import { STATUSES } from 'src/common/constants/statuses.constant';
 import { Status } from 'src/common/types/status.type';
+
+import { PLAN_TYPES } from 'src/plans/constants/plan-types.constant';
+import { PlanType } from 'src/plans/types/plan-type.type';
 
 @Entity('murals')
 export class MuralEntity extends TimestampEntity {
@@ -50,11 +51,11 @@ export class MuralEntity extends TimestampEntity {
   @Column({
     name: 'mural_plan',
     type: 'enum',
-    enum: MURAL_PLANS,
-    default: 'basic',
+    enum: PLAN_TYPES,
+    default: 'free',
     nullable: false,
   })
-  muralPlan: MuralPlan;
+  muralPlan: PlanType;
 
   @Column({
     type: 'enum',

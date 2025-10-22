@@ -1,4 +1,1 @@
-export const PLAN_TYPES = {
-  Free: 'free',
-  Pro: 'pro',
-} as const;
+export const PLAN_TYPES = ['free', 'pro'] as const;

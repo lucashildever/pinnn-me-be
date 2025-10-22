@@ -1,6 +1,6 @@
-export const INVOICE_TYPES = {
-  Subscription: 'subscription',
-  Renewal: 'renewal',
-  Cancellation: 'cancellation',
-  Refund: 'refund',
-} as const;
+export const INVOICE_TYPES = [
+  'subscription',
+  'renewal',
+  'cancellation',
+  'refund',
+] as const;

@@ -1,6 +1,6 @@
-export const CARD_VARIANTS = {
-  Link: 'link',
-  Image: 'image',
-  Download: 'download',
-  Integration: 'integration',
-} as const;
+export const CARD_VARIANTS = [
+  'link',
+  'image',
+  'download',
+  'integration',
+] as const;
