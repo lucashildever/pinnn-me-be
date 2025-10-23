@@ -1,4 +1,5 @@
 import {
+  Logger,
   Injectable,
   NotFoundException,
   BadRequestException,
@@ -20,10 +21,14 @@ import { CardDto } from './dto/card/card.dto';
 import { PinDto } from './dto/pin.dto';
 
 import { FractionalIndexingService } from 'src/common/services/fractional-indexing.service';
+import { IntegrationsService } from 'src/integrations/integrations.service';
 import { CacheService } from 'src/cache/cache.service';
+import { EmbedConfigDto } from './dto/card/embed-config.dto';
 
 @Injectable()
 export class PinsService {
+  private readonly logger = new Logger(PinsService.name);
+
   constructor(
     @InjectRepository(PinEntity)
     private readonly pinsRepository: Repository<PinEntity>,
@@ -31,6 +36,7 @@ export class PinsService {
     private readonly collectionsRepository: Repository<CollectionEntity>,
 
     private readonly fractionalIndexingService: FractionalIndexingService,
+    private readonly integrationsService: IntegrationsService,
     private readonly cacheService: CacheService,
     private readonly dataSource: DataSource,
   ) {}
@@ -164,9 +170,7 @@ export class PinsService {
     return await this.dataSource.transaction(async (manager) => {
       const collection = await manager
         .createQueryBuilder(CollectionEntity, 'collection')
-        .where('collection.id = :collectionId', {
-          collectionId: collectionId,
-        })
+        .where('collection.id = :collectionId', { collectionId })
         .andWhere('collection.status = :status', { status: 'active' })
         .getCount();
 
@@ -179,9 +183,7 @@ export class PinsService {
       const maxOrderResult = await manager
         .createQueryBuilder(PinEntity, 'pin')
         .select('MAX(pin.order)', 'maxOrder')
-        .where('pin.collectionId = :collectionId', {
-          collectionId: collectionId,
-        })
+        .where('pin.collectionId = :collectionId', { collectionId })
         .andWhere('pin.status = :status', { status: 'active' })
         .getRawOne();
 
@@ -198,25 +200,26 @@ export class PinsService {
         description: createPinDto.description,
         collectionId: collectionId,
         order: nextOrder,
-        status: 'active',
       });
 
       const savedPin = await manager.save(pin);
 
+      const enrichedCards = await this.enrichCardsWithIntegrationData(
+        createPinDto.cards || [],
+      );
+
       const cardEntities: CardEntity[] = [];
 
-      if (createPinDto.cards && createPinDto.cards.length > 0) {
-        for (const cardDto of createPinDto.cards) {
-          const cardEntity = manager.create(CardEntity, {
-            pinId: savedPin.id,
-            order: cardDto.order,
-            caption: cardDto.caption,
-            cardConfig: cardDto.cardConfig,
-          });
+      for (const cardDto of enrichedCards) {
+        const cardEntity = manager.create(CardEntity, {
+          pinId: savedPin.id,
+          order: cardDto.order,
+          caption: cardDto.caption,
+          cardConfig: cardDto.cardConfig,
+        });
 
-          const savedCard = await manager.save(cardEntity);
-          cardEntities.push(savedCard);
-        }
+        const savedCard = await manager.save(cardEntity);
+        cardEntities.push(savedCard);
       }
 
       await this.invalidateCollectionPinsCache(collectionId);
@@ -235,6 +238,79 @@ export class PinsService {
 
       return response;
     });
+  }
+
+  private async enrichCardsWithIntegrationData(
+    cards: CreateCardDto[],
+  ): Promise<CreateCardDto[]> {
+    if (!cards || cards.length === 0) {
+      return [];
+    }
+
+    const enrichedCards = await Promise.all(
+      cards.map(async (card) => {
+        if (card.cardConfig.variant !== 'integration') {
+          return card;
+        }
+
+        if (!card.cardConfig.embedConfig) {
+          this.logger.warn('Integration card missing embedConfig');
+          return card;
+        }
+
+        const { platform, url } = card.cardConfig.embedConfig;
+
+        try {
+          this.logger.debug(
+            `Fetching integration data for platform: ${platform}, URL: ${url}`,
+          );
+
+          const integrationData =
+            await this.integrationsService.fetchIntegration(platform, url);
+
+          this.logger.debug(
+            `Successfully fetched integration data for ${platform}`,
+          );
+
+          return {
+            ...card,
+            cardConfig: {
+              ...card.cardConfig,
+              embedConfig: {
+                platform,
+                url,
+                html: integrationData.html,
+                title: integrationData.title,
+                thumbnail: integrationData.thumbnailUrl,
+                fetchStatus: 'success' as const,
+              },
+            },
+          };
+        } catch (error) {
+          this.logger.warn(
+            `Failed to fetch integration for ${platform}: ${error.message}`,
+          );
+
+          return {
+            ...card,
+            cardConfig: {
+              ...card.cardConfig,
+              embedConfig: {
+                platform,
+                url,
+                integrationHtml: null,
+                integrationTitle: null,
+                integrationThumbnail: null,
+                fetchStatus: 'failed' as const,
+                fetchError: error.message,
+              },
+            },
+          };
+        }
+      }),
+    );
+
+    return enrichedCards;
   }
 
   private validateCardsOrdering(cards: CreateCardDto[]): void {
