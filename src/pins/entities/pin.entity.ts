@@ -4,12 +4,12 @@ import {
   ManyToOne,
   JoinColumn,
   OneToMany,
-  UpdateDateColumn,
+  DeleteDateColumn,
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { TimestampEntity } from 'src/common/entities/timestamp.entity';
 import { CollectionEntity } from 'src/collections/entities/collection.entity';
-import { CardEntity } from './card.entity';
+import { VariantEntity } from './variant.entity';
 import { STATUSES } from 'src/common/constants/statuses.constant';
 import { Status } from 'src/common/types/status.type';
 
@@ -27,18 +27,11 @@ export class PinEntity extends TimestampEntity {
   @Column('uuid')
   collectionId: string;
 
-  @OneToMany(() => CardEntity, (card) => card.pin, {
+  @OneToMany(() => VariantEntity, (variant) => variant.pin, {
     cascade: true,
     eager: true,
   })
-  cards: CardEntity[];
-
-  @Column({
-    type: 'text',
-    charset: 'utf8mb4',
-    nullable: true,
-  })
-  description: string;
+  variants: VariantEntity[];
 
   @Column({
     type: 'enum',
@@ -47,7 +40,7 @@ export class PinEntity extends TimestampEntity {
   })
   status: Status;
 
-  @UpdateDateColumn({ type: 'timestamp' })
+  @DeleteDateColumn({ type: 'timestamp', nullable: true })
   deletedAt: Date;
 
   @Column({

@@ -10,7 +10,7 @@ import {
   ArrayMinSize,
   ValidateNested,
 } from 'class-validator';
-import { CardDto } from './card/card.dto';
+import { VariantDto } from './variant/variant.dto';
 import { Type } from 'class-transformer';
 
 export class PinDto {
@@ -28,16 +28,10 @@ export class PinDto {
   @MaxLength(10)
   order: string;
 
-  @IsString()
-  @MinLength(4)
-  @IsNotEmpty()
-  @IsOptional()
-  description: string;
-
   @IsArray()
   @IsNotEmpty()
-  @ArrayMinSize(1, { message: 'At least one card is required' })
+  @ArrayMinSize(1, { message: 'At least one variant is required' })
   @ValidateNested({ each: true })
-  @Type(() => CardDto)
-  cards: CardDto[];
+  @Type(() => VariantDto)
+  variants: VariantDto[];
 }

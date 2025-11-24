@@ -8,22 +8,22 @@ import { Repository, DataSource, EntityManager } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 
 import { CollectionEntity } from 'src/collections/entities/collection.entity';
-import { CardEntity } from './entities/card.entity';
+import { VariantEntity } from './entities/variant.entity';
 import { PinEntity } from './entities/pin.entity';
 
 import { PaginatedPinsResponseDto } from './dto/pagination/paginated-pins-response.dto';
 import { PaginationQueryDto } from './dto/pagination/pagination-query.dto';
-import { CreateCardDto } from './dto/card/create-card.dto';
+import { CreateVariantDto } from './dto/variant/create-variant.dto';
 import { CreatePinDto } from './dto/create-pin.dto';
 import { UpdatePinDto } from './dto/update-pin.dto';
 import { ReorderDto } from './dto/reorder.dto';
-import { CardDto } from './dto/card/card.dto';
+import { VariantDto } from './dto/variant/variant.dto';
 import { PinDto } from './dto/pin.dto';
 
 import { FractionalIndexingService } from 'src/common/services/fractional-indexing.service';
 import { IntegrationsService } from 'src/integrations/integrations.service';
 import { CacheService } from 'src/cache/cache.service';
-import { EmbedConfigDto } from './dto/card/embed-config.dto';
+import { EmbedConfigDto } from './dto/variant/embed-config.dto';
 
 @Injectable()
 export class PinsService {
@@ -34,12 +34,14 @@ export class PinsService {
     private readonly pinsRepository: Repository<PinEntity>,
     @InjectRepository(CollectionEntity)
     private readonly collectionsRepository: Repository<CollectionEntity>,
+    @InjectRepository(VariantEntity)
+    private readonly variantsRepository: Repository<VariantEntity>,
 
     private readonly fractionalIndexingService: FractionalIndexingService,
     private readonly integrationsService: IntegrationsService,
     private readonly cacheService: CacheService,
     private readonly dataSource: DataSource,
-  ) {}
+  ) { }
 
   private readonly CACHE_TTL = 300;
   private readonly PINS_CACHE_KEY = (
@@ -56,111 +58,6 @@ export class PinsService {
   ): Promise<void> {
     const cachePattern = this.PINS_CACHE_PATTERN(collectionId);
     await this.cacheService.del(cachePattern);
-  }
-
-  async findPaginated(
-    collectionId: string,
-    paginationQueryDto: PaginationQueryDto,
-  ): Promise<PaginatedPinsResponseDto> {
-    const collectionExists = await this.collectionsRepository.exists({
-      where: { id: collectionId, status: 'active' },
-    });
-
-    if (!collectionExists) {
-      throw new NotFoundException(
-        `Collection with ID ${collectionId} not found`,
-      );
-    }
-
-    const { page = 1, limit = 5 } = paginationQueryDto;
-
-    const cacheKey = this.PINS_CACHE_KEY(collectionId, page, limit);
-
-    const cachedPins =
-      await this.cacheService.get<PaginatedPinsResponseDto>(cacheKey);
-    if (cachedPins) {
-      return cachedPins;
-    }
-
-    const skip = (page - 1) * limit;
-
-    const total = await this.pinsRepository.count({
-      where: {
-        collectionId: collectionId,
-        status: 'active',
-      },
-    });
-
-    const pins = await this.pinsRepository
-      .createQueryBuilder('pin')
-      .leftJoinAndSelect('pin.cards', 'card')
-      .where('pin.collectionId = :collectionId', { collectionId })
-      .andWhere('pin.status = :status', { status: 'active' })
-      .orderBy('pin.order', 'ASC')
-      .skip(skip)
-      .take(limit)
-      .getMany();
-
-    const pinsWithOrderedCards = pins.map((pin) => ({
-      ...pin,
-      cards: pin.cards.sort((a, b) => {
-        if (a.order < b.order) return -1;
-        if (a.order > b.order) return 1;
-        return 0;
-      }),
-    }));
-
-    const response: PaginatedPinsResponseDto = {
-      data: pinsWithOrderedCards.map((pin) => ({
-        id: pin.id,
-        description: pin.description,
-        collection_id: pin.collectionId,
-        order: pin.order,
-        cards: pin.cards.map((card) => {
-          const { pinId, ...cardWithoutPinId } = card;
-          return cardWithoutPinId;
-        }),
-      })),
-      pagination: {
-        currentPage: page,
-        totalItems: total,
-        itemsPerPage: limit,
-      },
-    };
-
-    await this.cacheService.set(cacheKey, response, this.CACHE_TTL);
-    return response;
-  }
-
-  async findOne(pinId: string): Promise<PinDto> {
-    const pin = await this.pinsRepository.findOne({
-      where: {
-        id: pinId,
-        status: 'active',
-      },
-      relations: ['cards'],
-      order: {
-        cards: {
-          order: 'ASC',
-        },
-      },
-    });
-
-    if (!pin) {
-      throw new NotFoundException(`Pin with ID ${pinId} not found`);
-    }
-
-    const response: PinDto = {
-      id: pin.id,
-      description: pin.description,
-      order: pin.order,
-      cards: pin.cards.map((card) => {
-        const { pinId, ...cardWithoutPinId } = card;
-        return cardWithoutPinId;
-      }),
-    };
-
-    return response;
   }
 
   async create(
@@ -192,47 +89,43 @@ export class PinsService {
         null,
       );
 
-      if (createPinDto.cards && createPinDto.cards.length > 0) {
-        this.validateCardsOrdering(createPinDto.cards);
+      if (createPinDto.variants && createPinDto.variants.length > 0) {
+        this.validateVariantsOrdering(createPinDto.variants);
       }
 
       const pin = manager.create(PinEntity, {
-        description: createPinDto.description,
         collectionId: collectionId,
         order: nextOrder,
       });
 
       const savedPin = await manager.save(pin);
 
-      const enrichedCards = await this.enrichCardsWithIntegrationData(
-        createPinDto.cards || [],
+      const enrichedVariants = await this.enrichVariantsWithIntegrationData(
+        createPinDto.variants || [],
       );
 
-      const cardEntities: CardEntity[] = [];
+      const variantEntities: VariantEntity[] = [];
 
-      for (const cardDto of enrichedCards) {
-        const cardEntity = manager.create(CardEntity, {
+      for (const variantDto of enrichedVariants) {
+        const variantEntity = manager.create(VariantEntity, {
           pinId: savedPin.id,
-          order: cardDto.order,
-          caption: cardDto.caption,
-          cardConfig: cardDto.cardConfig,
+          order: variantDto.order,
+          config: variantDto.config,
         });
 
-        const savedCard = await manager.save(cardEntity);
-        cardEntities.push(savedCard);
+        const savedVariant = await manager.save(variantEntity);
+        variantEntities.push(savedVariant);
       }
 
       await this.invalidateCollectionPinsCache(collectionId);
 
       const response: PinDto = {
         id: savedPin.id,
-        description: savedPin.description,
         order: savedPin.order,
-        cards: cardEntities.map((card) => ({
-          id: card.id,
-          order: card.order,
-          caption: card.caption,
-          cardConfig: card.cardConfig,
+        variants: variantEntities.map((variant) => ({
+          id: variant.id,
+          order: variant.order,
+          config: variant.config,
         })),
       };
 
@@ -240,25 +133,25 @@ export class PinsService {
     });
   }
 
-  private async enrichCardsWithIntegrationData(
-    cards: CreateCardDto[],
-  ): Promise<CreateCardDto[]> {
-    if (!cards || cards.length === 0) {
+  private async enrichVariantsWithIntegrationData(
+    variants: CreateVariantDto[],
+  ): Promise<CreateVariantDto[]> {
+    if (!variants || variants.length === 0) {
       return [];
     }
 
-    const enrichedCards = await Promise.all(
-      cards.map(async (card) => {
-        if (card.cardConfig.variant !== 'integration') {
-          return card;
+    const enrichedVariants = await Promise.all(
+      variants.map(async (variant) => {
+        if (variant.config.type !== 'integration') {
+          return variant;
         }
 
-        if (!card.cardConfig.embedConfig) {
-          this.logger.warn('Integration card missing embedConfig');
-          return card;
+        if (!variant.config.embedConfig) {
+          this.logger.warn('Integration variant missing embedConfig');
+          return variant;
         }
 
-        const { platform, url } = card.cardConfig.embedConfig;
+        const { platform, url } = variant.config.embedConfig;
 
         try {
           this.logger.debug(
@@ -273,9 +166,9 @@ export class PinsService {
           );
 
           return {
-            ...card,
-            cardConfig: {
-              ...card.cardConfig,
+            ...variant,
+            config: {
+              ...variant.config,
               embedConfig: {
                 platform,
                 url,
@@ -292,9 +185,9 @@ export class PinsService {
           );
 
           return {
-            ...card,
-            cardConfig: {
-              ...card.cardConfig,
+            ...variant,
+            config: {
+              ...variant.config,
               embedConfig: {
                 platform,
                 url,
@@ -310,22 +203,22 @@ export class PinsService {
       }),
     );
 
-    return enrichedCards;
+    return enrichedVariants;
   }
 
-  private validateCardsOrdering(cards: CreateCardDto[]): void {
-    const orders = cards.map((card) => card.order);
+  private validateVariantsOrdering(variants: CreateVariantDto[]): void {
+    const orders = variants.map((variant) => variant.order);
 
     const uniqueOrders = new Set(orders);
     if (uniqueOrders.size !== orders.length) {
-      throw new BadRequestException('Duplicate card orders are not allowed');
+      throw new BadRequestException('Duplicate variant orders are not allowed');
     }
 
     const sortedOrders = [...orders].sort();
     for (let i = 0; i < orders.length; i++) {
       if (orders[i] !== sortedOrders[i]) {
         throw new BadRequestException(
-          'Cards must be provided in sequential order',
+          'Variants must be provided in sequential order',
         );
       }
     }
@@ -356,10 +249,10 @@ export class PinsService {
     });
   }
 
-  async createCard(
+  async createVariant(
     pinId: string,
-    createCardDto: CreateCardDto,
-  ): Promise<CardDto> {
+    createVariantDto: CreateVariantDto,
+  ): Promise<VariantDto> {
     return await this.dataSource.transaction(async (manager) => {
       const pin = await manager
         .createQueryBuilder(PinEntity, 'pin')
@@ -374,33 +267,20 @@ export class PinsService {
         );
       }
 
-      const maxOrderResult = await manager
-        .createQueryBuilder(CardEntity, 'card')
-        .select('MAX(card.order)', 'maxOrder')
-        .where('card.pinId = :pinId', { pinId: pinId })
-        .getRawOne();
-
-      const nextOrder = this.fractionalIndexingService.generateKeyBetween(
-        maxOrderResult?.maxOrder || null,
-        null,
-      );
-
-      const card = manager.create(CardEntity, {
+      const variant = manager.create(VariantEntity, {
         pinId: pinId,
-        order: nextOrder,
-        caption: createCardDto.caption,
-        cardConfig: createCardDto.cardConfig,
+        order: createVariantDto.order,
+        config: createVariantDto.config,
       });
 
-      const savedCard = await manager.save(card);
+      const savedVariant = await manager.save(variant);
 
       await this.invalidateCollectionPinsCache(pin.collectionId);
 
-      const response: CardDto = {
-        id: savedCard.id,
-        order: savedCard.order,
-        caption: savedCard.caption,
-        cardConfig: savedCard.cardConfig,
+      const response: VariantDto = {
+        id: savedVariant.id,
+        order: savedVariant.order,
+        config: savedVariant.config,
       };
 
       return response;
@@ -411,7 +291,7 @@ export class PinsService {
     return await this.dataSource.transaction(async (manager) => {
       const pinToUpdate = await manager
         .createQueryBuilder(PinEntity, 'pin')
-        .leftJoinAndSelect('pin.cards', 'cards')
+        .leftJoinAndSelect('pin.variants', 'variants')
         .where('pin.id = :pinId', { pinId })
         .andWhere('pin.status = :status', { status: 'active' })
         .getOne();
@@ -422,41 +302,27 @@ export class PinsService {
 
       let pinUpdated = false;
 
-      if (updatePinDto.description !== undefined) {
-        pinToUpdate.description = updatePinDto.description;
-        pinUpdated = true;
-      }
-
-      if (pinUpdated) {
-        await manager.save(pinToUpdate);
-      }
-
-      if (updatePinDto.cards && updatePinDto.cards.length > 0) {
-        for (const cardUpdate of updatePinDto.cards) {
-          const cardToUpdate = pinToUpdate.cards.find(
-            (card) => card.id === cardUpdate.id,
+      if (updatePinDto.variants && updatePinDto.variants.length > 0) {
+        for (const variantUpdate of updatePinDto.variants) {
+          const variantToUpdate = pinToUpdate.variants.find(
+            (variant) => variant.id === variantUpdate.id,
           );
 
-          if (!cardToUpdate) {
+          if (!variantToUpdate) {
             throw new NotFoundException(
-              `Card with ID ${cardUpdate.id} not found in pin ${pinId}`,
+              `Variant with ID ${variantUpdate.id} not found in pin ${pinId}`,
             );
           }
 
-          let cardUpdated = false;
+          let variantUpdated = false;
 
-          if (cardUpdate.caption !== undefined) {
-            cardToUpdate.caption = cardUpdate.caption;
-            cardUpdated = true;
+          if (variantUpdate.config !== undefined) {
+            variantToUpdate.config = variantUpdate.config;
+            variantUpdated = true;
           }
 
-          if (cardUpdate.cardConfig !== undefined) {
-            cardToUpdate.cardConfig = cardUpdate.cardConfig;
-            cardUpdated = true;
-          }
-
-          if (cardUpdated) {
-            await manager.save(cardToUpdate);
+          if (variantUpdated) {
+            await manager.save(variantToUpdate);
           }
         }
       }
@@ -465,9 +331,9 @@ export class PinsService {
 
       const updatedPin = await manager
         .createQueryBuilder(PinEntity, 'pin')
-        .leftJoinAndSelect('pin.cards', 'cards')
+        .leftJoinAndSelect('pin.variants', 'variants')
         .where('pin.id = :pinId', { pinId })
-        .orderBy('cards.order', 'ASC')
+        .orderBy('variants.order', 'ASC')
         .getOne();
 
       if (!updatedPin) {
@@ -476,13 +342,11 @@ export class PinsService {
 
       return {
         id: updatedPin.id,
-        description: updatedPin.description,
         order: updatedPin.order,
-        cards: updatedPin.cards.map((card) => ({
-          id: card.id,
-          order: card.order,
-          caption: card.caption,
-          cardConfig: card.cardConfig,
+        variants: updatedPin.variants.map((variant) => ({
+          id: variant.id,
+          order: variant.order,
+          config: variant.config,
         })),
       };
     });
@@ -496,7 +360,7 @@ export class PinsService {
       if (reorderDto.type === 'pin') {
         return await this.reorderPin(manager, id, reorderDto.newOrder);
       } else {
-        return await this.reorderCard(manager, id, reorderDto.newOrder);
+        return await this.reorderVariant(manager, id, reorderDto.newOrder);
       }
     });
   }
@@ -571,56 +435,56 @@ export class PinsService {
     return { message: `Pin ${pinId} successfully reordered` };
   }
 
-  private async reorderCard(
+  private async reorderVariant(
     manager: EntityManager,
-    cardId: string,
+    variantId: string,
     newOrder: string,
   ): Promise<{ message: string }> {
-    const cardToUpdate = await manager
-      .createQueryBuilder(CardEntity, 'card')
-      .where('card.id = :cardId', { cardId })
+    const variantToUpdate = await manager
+      .createQueryBuilder(VariantEntity, 'variant')
+      .where('variant.id = :variantId', { variantId })
       .getOne();
 
-    if (!cardToUpdate) {
-      throw new NotFoundException(`Card with ID ${cardId} not found`);
+    if (!variantToUpdate) {
+      throw new NotFoundException(`Variant with ID ${variantId} not found`);
     }
 
     // Busca o pin para invalidar cache da coleção
     const pin = await manager
       .createQueryBuilder(PinEntity, 'pin')
-      .where('pin.id = :pinId', { pinId: cardToUpdate.pinId })
+      .where('pin.id = :pinId', { pinId: variantToUpdate.pinId })
       .andWhere('pin.status = :status', { status: 'active' })
       .getOne();
 
     if (!pin) {
       throw new NotFoundException(
-        `Pin with ID ${cardToUpdate.pinId} not found`,
+        `Pin with ID ${variantToUpdate.pinId} not found`,
       );
     }
 
     const predecessor = await manager
-      .createQueryBuilder(CardEntity, 'card')
-      .where('card.pinId = :pinId', { pinId: cardToUpdate.pinId })
-      .andWhere('card.id != :cardId', { cardId })
-      .andWhere('card.order < :newOrder', { newOrder })
-      .orderBy('card.order', 'DESC')
+      .createQueryBuilder(VariantEntity, 'variant')
+      .where('variant.pinId = :pinId', { pinId: variantToUpdate.pinId })
+      .andWhere('variant.id != :variantId', { variantId })
+      .andWhere('variant.order < :newOrder', { newOrder })
+      .orderBy('variant.order', 'DESC')
       .limit(1)
       .getOne();
 
     const successor = await manager
-      .createQueryBuilder(CardEntity, 'card')
-      .where('card.pinId = :pinId', { pinId: cardToUpdate.pinId })
-      .andWhere('card.id != :cardId', { cardId })
-      .andWhere('card.order > :newOrder', { newOrder })
-      .orderBy('card.order', 'ASC')
+      .createQueryBuilder(VariantEntity, 'variant')
+      .where('variant.pinId = :pinId', { pinId: variantToUpdate.pinId })
+      .andWhere('variant.id != :variantId', { variantId })
+      .andWhere('variant.order > :newOrder', { newOrder })
+      .orderBy('variant.order', 'ASC')
       .limit(1)
       .getOne();
 
     const existingWithSameOrder = await manager
-      .createQueryBuilder(CardEntity, 'card')
-      .where('card.pinId = :pinId', { pinId: cardToUpdate.pinId })
-      .andWhere('card.id != :cardId', { cardId })
-      .andWhere('card.order = :newOrder', { newOrder })
+      .createQueryBuilder(VariantEntity, 'variant')
+      .where('variant.pinId = :pinId', { pinId: variantToUpdate.pinId })
+      .andWhere('variant.id != :variantId', { variantId })
+      .andWhere('variant.order = :newOrder', { newOrder })
       .getOne();
 
     if (existingWithSameOrder) {
@@ -637,10 +501,10 @@ export class PinsService {
       throw new BadRequestException('New order must be less than successor');
     }
 
-    await manager.update(CardEntity, { id: cardId }, { order: newOrder });
+    await manager.update(VariantEntity, { id: variantId }, { order: newOrder });
 
     await this.invalidateCollectionPinsCache(pin.collectionId);
 
-    return { message: `Card ${cardId} successfully reordered` };
+    return { message: `Variant ${variantId} successfully reordered` };
   }
 }

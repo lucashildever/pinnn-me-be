@@ -17,7 +17,7 @@ import { CollectionsService } from 'src/collections/collections.service';
 import { CredentialsService } from 'src/credentials/credentials.service';
 import { CacheService } from 'src/cache/cache.service';
 import { UsersService } from 'src/users/users.service';
-import { PinsService } from 'src/pins/pins.service';
+import { ResourcesService } from 'src/resources/resources.service';
 
 import { MuralEntity } from './entities/mural.entity';
 import { CallToActionDto } from './dto/call-to-action/call-to-action.dto';
@@ -40,11 +40,11 @@ export class MuralsService {
     private readonly credentialsService: CredentialsService,
     private readonly cacheService: CacheService,
     private readonly usersService: UsersService,
-    private readonly pinsService: PinsService,
-  ) {}
+    private readonly resourcesService: ResourcesService,
+  ) { }
 
-  private readonly MURAL_CACHE_KEY = (muralName: string, withPins: boolean) =>
-    `mural:${muralName}:${withPins}`;
+  private readonly MURAL_CACHE_KEY = (muralName: string, withResources: boolean) =>
+    `mural:${muralName}:${withResources}`;
   private readonly MURAL_NAME_CACHE_KEY = (name: string) =>
     `mural:name:${name}`;
   private readonly CACHE_TTL = 300;
@@ -52,10 +52,10 @@ export class MuralsService {
 
   async find(
     muralName: string,
-    getMainCollectionPins: boolean = false,
+    getMainCollectionResources: boolean = false,
     includeInactives: boolean = false,
   ): Promise<MuralResponseDto> {
-    const cacheKey = this.MURAL_CACHE_KEY(muralName, getMainCollectionPins);
+    const cacheKey = this.MURAL_CACHE_KEY(muralName, getMainCollectionResources);
     const cachedMural = await this.cacheService.get<MuralResponseDto>(cacheKey);
 
     if (cachedMural) {
@@ -90,27 +90,27 @@ export class MuralsService {
       order: { createdAt: 'ASC' },
     });
 
-    const ctas = callToActions.map((cta) => ({
+    const mappedCtas = callToActions.map((cta) => ({
       id: cta.id,
       content: cta.displayElement.content,
       iconConfig: cta.displayElement.iconConfig,
       callToActionConfig: cta.callToActionConfig,
     }));
 
-    if (ctas.length > 0) {
-      response.callToActions = ctas;
+    if (mappedCtas.length > 0) {
+      response.callToActions = mappedCtas;
     }
 
-    if (getMainCollectionPins) {
+    if (getMainCollectionResources) {
       try {
         const mainCollection = await this.collectionsService.findMain(mural.id);
-        response.mainCollectionPins = await this.pinsService.findPaginated(
+        response.mainCollectionResources = await this.resourcesService.findPaginated(
           mainCollection.id,
           { page: 1, limit: 5 },
         );
       } catch (err) {
         if (err instanceof NotFoundException) {
-          response.mainCollectionPins = {
+          response.mainCollectionResources = {
             data: [],
             pagination: {
               currentPage: 1,

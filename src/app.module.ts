@@ -20,13 +20,14 @@ import { CollectionsModule } from './collections/collections.module';
 import { CredentialsModule } from './credentials/credentials.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { IntegrationsModule } from './integrations/integrations.module';
+import { ResourcesModule } from './resources/resources.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       load: [configuration],
       envFilePath: `.env.${process.env.NODE_ENV || 'development'}`,
-      ignoreEnvFile: process.env.NODE_ENV === 'production', 
+      ignoreEnvFile: process.env.NODE_ENV === 'production',
       isGlobal: true,
     }),
     TypeOrmModule.forRoot({
@@ -56,6 +57,7 @@ import { IntegrationsModule } from './integrations/integrations.module';
     WebhooksModule,
     BillingsModule,
     IntegrationsModule,
+    ResourcesModule,
   ],
 })
-export class AppModule {}
+export class AppModule { }

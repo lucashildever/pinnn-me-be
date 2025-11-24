@@ -6,22 +6,22 @@ import { CollectionsModule } from 'src/collections/collections.module';
 import { CommonModule } from 'src/common/common.module';
 import { CacheModule } from 'src/cache/cache.module';
 
-import { PinsController } from './pins.controller';
+
 import { PinsService } from './pins.service';
 
-import { CardEntity } from './entities/card.entity';
+import { VariantEntity } from './entities/variant.entity';
 import { PinEntity } from './entities/pin.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([PinEntity, CardEntity]),
+    TypeOrmModule.forFeature([PinEntity, VariantEntity]),
     IntegrationsModule,
     CollectionsModule,
     CommonModule,
     CacheModule,
   ],
   providers: [PinsService],
-  controllers: [PinsController],
+  controllers: [],
   exports: [PinsService, TypeOrmModule],
 })
-export class PinsModule {}
+export class PinsModule { }

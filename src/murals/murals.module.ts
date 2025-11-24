@@ -11,7 +11,7 @@ import { CollectionsModule } from 'src/collections/collections.module';
 import { CommonModule } from 'src/common/common.module';
 import { CacheModule } from 'src/cache/cache.module';
 import { UsersModule } from 'src/users/users.module';
-import { PinsModule } from 'src/pins/pins.module';
+import { ResourcesModule } from 'src/resources/resources.module';
 
 @Module({
   imports: [
@@ -21,10 +21,10 @@ import { PinsModule } from 'src/pins/pins.module';
     CommonModule,
     CacheModule,
     UsersModule,
-    PinsModule,
+    ResourcesModule,
   ],
   controllers: [MuralsController],
   providers: [MuralsService],
   exports: [MuralsService, TypeOrmModule],
 })
-export class MuralsModule {}
+export class MuralsModule { }
