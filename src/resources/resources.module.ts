@@ -8,14 +8,14 @@ import { CommonModule } from 'src/common/common.module';
 import { CollectionsModule } from 'src/collections/collections.module';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([ResourceEntity]),
-        PinsModule,
-        CommonModule,
-        CollectionsModule,
-    ],
-    controllers: [ResourcesController],
-    providers: [ResourcesService],
-    exports: [ResourcesService],
+  imports: [
+    TypeOrmModule.forFeature([ResourceEntity]),
+    PinsModule,
+    CommonModule,
+    CollectionsModule,
+  ],
+  controllers: [ResourcesController],
+  providers: [ResourcesService],
+  exports: [ResourcesService],
 })
-export class ResourcesModule { }
+export class ResourcesModule {}

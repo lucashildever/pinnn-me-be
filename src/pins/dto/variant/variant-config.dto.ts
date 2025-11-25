@@ -1,11 +1,11 @@
 import {
-    IsIn,
-    IsUrl,
-    IsString,
-    IsNotEmpty,
-    ValidateIf,
-    ValidateNested,
-    MaxLength,
+  IsIn,
+  IsUrl,
+  IsString,
+  IsNotEmpty,
+  ValidateIf,
+  ValidateNested,
+  MaxLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -15,36 +15,36 @@ import { PIN_VARIANTS } from '../../constants/pin-variants.constant';
 import { PinVariant } from '../../types/pin-variant.type';
 
 export class VariantConfigDto {
-    @IsIn(PIN_VARIANTS)
-    @IsNotEmpty()
-    type: PinVariant;
+  @IsIn(PIN_VARIANTS)
+  @IsNotEmpty()
+  type: PinVariant;
 
-    @ValidateIf((o) => o.type === 'title' || o.type === 'text')
-    @IsString()
-    @IsNotEmpty()
-    @ValidateIf((o) => o.type === 'title')
-    @MaxLength(50, { message: 'Title content must not exceed 50 characters' })
-    @ValidateIf((o) => o.type === 'text')
-    @MaxLength(100, { message: 'Text content must not exceed 100 characters' })
-    content?: string;
+  @ValidateIf((o) => o.type === 'title' || o.type === 'text')
+  @IsString()
+  @IsNotEmpty()
+  @ValidateIf((o) => o.type === 'title')
+  @MaxLength(50, { message: 'Title content must not exceed 50 characters' })
+  @ValidateIf((o) => o.type === 'text')
+  @MaxLength(100, { message: 'Text content must not exceed 100 characters' })
+  content?: string;
 
-    @ValidateIf((o) => o.type === 'link')
-    @IsUrl()
-    @IsNotEmpty()
-    href?: string;
+  @ValidateIf((o) => o.type === 'link')
+  @IsUrl()
+  @IsNotEmpty()
+  href?: string;
 
-    @ValidateIf((o) => o.type === 'link' || o.type === 'download')
-    @ValidateNested()
-    @Type(() => IconConfigDto)
-    iconConfig?: IconConfigDto;
+  @ValidateIf((o) => o.type === 'link' || o.type === 'download')
+  @ValidateNested()
+  @Type(() => IconConfigDto)
+  iconConfig?: IconConfigDto;
 
-    @ValidateIf((o) => o.type === 'image')
-    @IsUrl()
-    @IsNotEmpty()
-    src?: string;
+  @ValidateIf((o) => o.type === 'image')
+  @IsUrl()
+  @IsNotEmpty()
+  src?: string;
 
-    @ValidateIf((o) => o.type === 'integration')
-    @ValidateNested()
-    @Type(() => EmbedConfigDto)
-    embedConfig?: EmbedConfigDto;
+  @ValidateIf((o) => o.type === 'integration')
+  @ValidateNested()
+  @Type(() => EmbedConfigDto)
+  embedConfig?: EmbedConfigDto;
 }

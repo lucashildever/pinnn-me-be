@@ -41,10 +41,12 @@ export class MuralsService {
     private readonly cacheService: CacheService,
     private readonly usersService: UsersService,
     private readonly resourcesService: ResourcesService,
-  ) { }
+  ) {}
 
-  private readonly MURAL_CACHE_KEY = (muralName: string, withResources: boolean) =>
-    `mural:${muralName}:${withResources}`;
+  private readonly MURAL_CACHE_KEY = (
+    muralName: string,
+    withResources: boolean,
+  ) => `mural:${muralName}:${withResources}`;
   private readonly MURAL_NAME_CACHE_KEY = (name: string) =>
     `mural:name:${name}`;
   private readonly CACHE_TTL = 300;
@@ -55,7 +57,10 @@ export class MuralsService {
     getMainCollectionResources: boolean = false,
     includeInactives: boolean = false,
   ): Promise<MuralResponseDto> {
-    const cacheKey = this.MURAL_CACHE_KEY(muralName, getMainCollectionResources);
+    const cacheKey = this.MURAL_CACHE_KEY(
+      muralName,
+      getMainCollectionResources,
+    );
     const cachedMural = await this.cacheService.get<MuralResponseDto>(cacheKey);
 
     if (cachedMural) {
@@ -104,10 +109,11 @@ export class MuralsService {
     if (getMainCollectionResources) {
       try {
         const mainCollection = await this.collectionsService.findMain(mural.id);
-        response.mainCollectionResources = await this.resourcesService.findPaginated(
-          mainCollection.id,
-          { page: 1, limit: 5 },
-        );
+        response.mainCollectionResources =
+          await this.resourcesService.findPaginated(mainCollection.id, {
+            page: 1,
+            limit: 5,
+          });
       } catch (err) {
         if (err instanceof NotFoundException) {
           response.mainCollectionResources = {

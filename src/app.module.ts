@@ -60,4 +60,4 @@ import { ResourcesModule } from './resources/resources.module';
     ResourcesModule,
   ],
 })
-export class AppModule { }
+export class AppModule {}

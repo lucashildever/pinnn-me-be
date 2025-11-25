@@ -4,15 +4,12 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { Repository, DataSource, EntityManager } from 'typeorm';
-import { InjectRepository } from '@nestjs/typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 
 import { CollectionEntity } from 'src/collections/entities/collection.entity';
 import { VariantEntity } from './entities/variant.entity';
 import { PinEntity } from './entities/pin.entity';
 
-import { PaginatedPinsResponseDto } from './dto/pagination/paginated-pins-response.dto';
-import { PaginationQueryDto } from './dto/pagination/pagination-query.dto';
 import { CreateVariantDto } from './dto/variant/create-variant.dto';
 import { CreatePinDto } from './dto/create-pin.dto';
 import { UpdatePinDto } from './dto/update-pin.dto';
@@ -23,25 +20,17 @@ import { PinDto } from './dto/pin.dto';
 import { FractionalIndexingService } from 'src/common/services/fractional-indexing.service';
 import { IntegrationsService } from 'src/integrations/integrations.service';
 import { CacheService } from 'src/cache/cache.service';
-import { EmbedConfigDto } from './dto/variant/embed-config.dto';
 
 @Injectable()
 export class PinsService {
   private readonly logger = new Logger(PinsService.name);
 
   constructor(
-    @InjectRepository(PinEntity)
-    private readonly pinsRepository: Repository<PinEntity>,
-    @InjectRepository(CollectionEntity)
-    private readonly collectionsRepository: Repository<CollectionEntity>,
-    @InjectRepository(VariantEntity)
-    private readonly variantsRepository: Repository<VariantEntity>,
-
     private readonly fractionalIndexingService: FractionalIndexingService,
     private readonly integrationsService: IntegrationsService,
     private readonly cacheService: CacheService,
     private readonly dataSource: DataSource,
-  ) { }
+  ) {}
 
   private readonly CACHE_TTL = 300;
   private readonly PINS_CACHE_KEY = (

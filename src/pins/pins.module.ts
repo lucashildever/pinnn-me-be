@@ -6,7 +6,6 @@ import { CollectionsModule } from 'src/collections/collections.module';
 import { CommonModule } from 'src/common/common.module';
 import { CacheModule } from 'src/cache/cache.module';
 
-
 import { PinsService } from './pins.service';
 
 import { VariantEntity } from './entities/variant.entity';
@@ -24,4 +23,4 @@ import { PinEntity } from './entities/pin.entity';
   controllers: [],
   exports: [PinsService, TypeOrmModule],
 })
-export class PinsModule { }
+export class PinsModule {}

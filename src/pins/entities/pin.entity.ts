@@ -46,8 +46,7 @@ export class PinEntity extends TimestampEntity {
   @Column({
     type: 'varchar',
     length: 50,
-    nullable: false,
-    default: '0',
+    nullable: true,
   })
   order: string;
 }

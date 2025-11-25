@@ -19,14 +19,14 @@ export class PinDto {
   id: string;
 
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   @Matches(/^[0-9A-Za-z_-]+$/, {
     message:
       'order must contain only alphanumeric characters, hyphens or underscores',
   })
   @MinLength(1)
   @MaxLength(10)
-  order: string;
+  order?: string;
 
   @IsArray()
   @IsNotEmpty()

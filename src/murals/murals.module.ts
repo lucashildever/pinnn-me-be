@@ -27,4 +27,4 @@ import { ResourcesModule } from 'src/resources/resources.module';
   providers: [MuralsService],
   exports: [MuralsService, TypeOrmModule],
 })
-export class MuralsModule { }
+export class MuralsModule {}
