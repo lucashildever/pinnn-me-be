@@ -8,6 +8,7 @@ import { Repository, DataSource, EntityManager } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ResourceEntity } from './entities/resource.entity';
 import { PinsService } from 'src/pins/pins.service';
+import { PinEntity } from 'src/pins/entities/pin.entity';
 import { CollectionEntity } from 'src/collections/entities/collection.entity';
 import { FractionalIndexingService } from 'src/common/services/fractional-indexing.service';
 import { PaginationQueryDto } from 'src/pins/dto/pagination/pagination-query.dto';
@@ -40,7 +41,7 @@ export class ResourcesService {
       .leftJoinAndSelect('resource.pin', 'pin')
       .leftJoinAndSelect('pin.variants', 'variants')
       .where('resource.collectionId = :collectionId', { collectionId })
-      .andWhere('(pin.id IS NULL OR pin.deletedAt IS NULL)')
+      .andWhere('resource.status = :status', { status: 'active' })
       .orderBy('resource.order', 'ASC')
       .skip(skip)
       .take(limit);
@@ -125,10 +126,8 @@ export class ResourcesService {
         null,
       );
 
-      const createdPin = await this.pinsService.create(
-        collectionId,
-        createPinDto,
-      );
+      // Create pin without collectionId - it's now independent
+      const createdPin = await this.pinsService.create(createPinDto);
 
       const resource = manager.create(ResourceEntity, {
         type: 'pin',
@@ -144,25 +143,14 @@ export class ResourcesService {
   async softDelete(resourceId: string) {
     const resource = await this.resourcesRepository.findOne({
       where: { id: resourceId },
-      relations: ['pin'],
     });
 
     if (!resource) throw new NotFoundException('Resource not found');
 
-    if (resource.type === 'pin' && resource.pin) {
-      await this.pinsService.softDelete(resource.pin.id);
-    }
+    resource.status = 'deleted';
+    await this.resourcesRepository.softRemove(resource);
 
-    // Soft delete resource (if we add deletedAt) or hard delete?
-    // User didn't specify soft delete for resource, but usually good practice.
-    // ResourceEntity extends TimestampEntity which has createdAt/updatedAt but NOT deletedAt by default unless added.
-    // Let's check TimestampEntity again.
-    // It has CreateDateColumn and UpdateDateColumn. No DeleteDateColumn.
-    // PinEntity has @UpdateDateColumn({ type: 'timestamp' }) deletedAt; manually added?
-    // Let's assume hard delete for resource for now or just delete it since it's a wrapper.
-    // If we delete the resource, the pin is soft deleted.
-
-    return await this.resourcesRepository.remove(resource);
+    return { message: `Resource ${resourceId} successfully deleted` };
   }
 
   async updatePinResource(resourceId: string, updatePinDto: UpdatePinDto) {
@@ -204,21 +192,10 @@ export class ResourcesService {
       .leftJoinAndSelect('resource.pin', 'pin')
       .leftJoinAndSelect('pin.variants', 'variants')
       .where('resource.id = :resourceId', { resourceId })
-      .andWhere('(pin.id IS NULL OR pin.deletedAt IS NULL)')
+      .andWhere('resource.status = :status', { status: 'active' })
       .getOne();
 
     if (!resource) throw new NotFoundException('Resource not found');
     return resource;
-  }
-
-  async reorderVariant(variantId: string, reorderDto: ReorderDto) {
-    // Use the public reorder method from PinsService which handles variants when type is not 'pin'
-    // We need to ensure the DTO has type 'variant' (or anything other than 'pin')
-    // PinsService.reorder checks: if (reorderDto.type === 'pin') ... else ...
-    // So any type != 'pin' goes to reorderVariant.
-    return await this.pinsService.reorder(variantId, {
-      ...reorderDto,
-      type: 'variant' as any,
-    });
   }
 }

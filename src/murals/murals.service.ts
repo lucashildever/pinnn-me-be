@@ -107,27 +107,12 @@ export class MuralsService {
     }
 
     if (getMainCollectionResources) {
-      try {
-        const mainCollection = await this.collectionsService.findMain(mural.id);
-        response.mainCollectionResources =
-          await this.resourcesService.findPaginated(mainCollection.id, {
-            page: 1,
-            limit: 5,
-          });
-      } catch (err) {
-        if (err instanceof NotFoundException) {
-          response.mainCollectionResources = {
-            data: [],
-            pagination: {
-              currentPage: 1,
-              totalItems: 0,
-              itemsPerPage: 5,
-            },
-          };
-        } else {
-          throw err;
-        }
-      }
+      const mainCollection = await this.collectionsService.findMain(mural.id);
+      response.mainCollectionResources =
+        await this.resourcesService.findPaginated(mainCollection.id, {
+          page: 1,
+          limit: 5,
+        });
     }
     await this.cacheService.set(cacheKey, response, this.CACHE_TTL);
 

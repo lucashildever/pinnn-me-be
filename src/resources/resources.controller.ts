@@ -73,13 +73,4 @@ export class ResourcesController {
   ) {
     return this.resourcesService.findOne(resourceId);
   }
-
-  @UseGuards(JwtAuthGuard)
-  @Patch('variant/reorder/:variantId')
-  async reorderVariant(
-    @Param('variantId', new ParseUUIDPipe()) variantId: string,
-    @Body() reorderDto: ReorderDto,
-  ) {
-    return this.resourcesService.reorderVariant(variantId, reorderDto);
-  }
 }

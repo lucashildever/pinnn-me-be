@@ -36,10 +36,18 @@ export class MuralsController {
   @Get(':muralName')
   getMural(
     @Param('muralName') muralName: string,
-    @Query('getMainCollectionPins', new DefaultValuePipe(false), ParseBoolPipe)
-    getMainCollectionPins: boolean,
+    @Query(
+      'getMainCollectionResources',
+      new DefaultValuePipe(false),
+      ParseBoolPipe,
+    )
+    getMainCollectionResources: boolean,
   ): Promise<MuralResponseDto> {
-    return this.muralsService.find(muralName, getMainCollectionPins, false);
+    return this.muralsService.find(
+      muralName,
+      getMainCollectionResources,
+      false,
+    );
   }
 
   @UseGuards(JwtAuthGuard)

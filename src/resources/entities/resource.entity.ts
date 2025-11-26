@@ -5,6 +5,7 @@ import {
   OneToOne,
   ManyToOne,
   JoinColumn,
+  DeleteDateColumn,
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { TimestampEntity } from 'src/common/entities/timestamp.entity';
@@ -13,6 +14,8 @@ import { ResourceType } from '../types/resource-type.type';
 import { CollectionEntity } from 'src/collections/entities/collection.entity';
 import { PinEntity } from 'src/pins/entities/pin.entity';
 import { PinGroupEntity } from 'src/pins/entities/pin-group.entity';
+import { STATUSES } from 'src/common/constants/statuses.constant';
+import { Status } from 'src/common/types/status.type';
 
 @Entity('resources')
 export class ResourceEntity extends TimestampEntity {
@@ -25,13 +28,15 @@ export class ResourceEntity extends TimestampEntity {
   })
   type: ResourceType;
 
-  @ManyToOne(() => CollectionEntity, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'collectionId' })
+  @Column({ type: 'uuid' })
+  collectionId: string;
+
+  @ManyToOne(() => CollectionEntity, (collection) => collection.resources, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'collection_id' })
   @Index()
   collection: CollectionEntity;
-
-  @Column('uuid')
-  collectionId: string;
 
   @Column({
     type: 'varchar',
@@ -46,14 +51,18 @@ export class ResourceEntity extends TimestampEntity {
   @JoinColumn({ name: 'pinId' })
   pin: PinEntity;
 
-  @Column('uuid', { nullable: true })
-  pinId: string;
-
   // For 'pin-group' and 'shared-pin-group' types
   @OneToOne(() => PinGroupEntity, { nullable: true, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'pinGroupId' })
   pinGroup: PinGroupEntity;
 
-  @Column('uuid', { nullable: true })
-  pinGroupId: string;
+  @Column({
+    type: 'enum',
+    enum: STATUSES,
+    default: 'active',
+  })
+  status: Status;
+
+  @DeleteDateColumn({ type: 'timestamp', nullable: true })
+  deletedAt: Date;
 }

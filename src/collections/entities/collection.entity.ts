@@ -1,17 +1,17 @@
 import {
   Column,
   Entity,
-  ManyToOne,
+  OneToOne,
   OneToMany,
+  ManyToOne,
   JoinColumn,
   UpdateDateColumn,
   PrimaryGeneratedColumn,
-  OneToOne,
 } from 'typeorm';
 import { DisplayElementEntity } from 'src/common/entities/display-element.entity';
 import { TimestampEntity } from 'src/common/entities/timestamp.entity';
 import { MuralEntity } from '../../murals/entities/mural.entity';
-import { PinEntity } from 'src/pins/entities/pin.entity';
+import { ResourceEntity } from 'src/resources/entities/resource.entity';
 import { STATUSES } from 'src/common/constants/statuses.constant';
 import { Status } from 'src/common/types/status.type';
 
@@ -20,14 +20,14 @@ export class CollectionEntity extends TimestampEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @OneToMany(() => PinEntity, (pinEntity) => pinEntity.collection)
-  pins: PinEntity[];
-
   @ManyToOne(() => MuralEntity, (muralEntity) => muralEntity.collections, {
     nullable: false,
   })
   @JoinColumn()
   mural: MuralEntity;
+
+  @OneToMany(() => ResourceEntity, (resource) => resource.collection)
+  resources: ResourceEntity[];
 
   @Column({ type: 'uuid' })
   muralId: string;
