@@ -1,17 +1,30 @@
-import { IsEnum, IsNotEmpty, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
-import { ResourceTypes } from '../constants/resource-types.constant';
-import { ResourceType } from '../types/resource-type.type';
 import { CreatePinDto } from 'src/pins/dto/create-pin.dto';
 
 export class CreateResourceDto {
-  @IsEnum(ResourceTypes)
-  @IsNotEmpty()
-  type: ResourceType;
-
-  @ValidateNested()
+  @IsArray()
+  @ValidateNested({ each: true })
   @Type(() => CreatePinDto)
   @IsNotEmpty()
-  data: CreatePinDto;
+  pins: CreatePinDto[];
+
+  @IsOptional()
+  @IsString()
+  sharedResourceId?: string;
+
+  @IsOptional()
+  @IsString()
+  sourceMuralId?: string;
+
+  @IsOptional()
+  @IsString()
+  groupName?: string;
 }

@@ -1,14 +1,9 @@
-import {
-  Logger,
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
-import { Repository, DataSource, EntityManager } from 'typeorm';
+import { Logger, Injectable, NotFoundException } from '@nestjs/common';
+import { Repository, DataSource } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ResourceEntity } from './entities/resource.entity';
+import { ResourceMetaEntity } from './entities/resource-meta.entity';
 import { PinsService } from 'src/pins/pins.service';
-import { PinEntity } from 'src/pins/entities/pin.entity';
 import { CollectionEntity } from 'src/collections/entities/collection.entity';
 import { FractionalIndexingService } from 'src/common/services/fractional-indexing.service';
 import { PaginationQueryDto } from 'src/pins/dto/pagination/pagination-query.dto';
@@ -38,7 +33,7 @@ export class ResourcesService {
 
     const queryBuilder = this.resourcesRepository
       .createQueryBuilder('resource')
-      .leftJoinAndSelect('resource.pin', 'pin')
+      .leftJoinAndSelect('resource.pins', 'pin')
       .leftJoinAndSelect('pin.variants', 'variants')
       .where('resource.collectionId = :collectionId', { collectionId })
       .andWhere('resource.status = :status', { status: 'active' })
@@ -50,20 +45,20 @@ export class ResourcesService {
 
     const transformedResources = resources.map((resource) => ({
       id: resource.id,
-      type: resource.type,
-      collectionId: resource.collectionId,
+
       order: resource.order,
-      ...(resource.pin && {
-        pin: {
-          id: resource.pin.id,
-          order: resource.pin.order,
-          variants: resource.pin.variants.map((variant) => ({
-            id: variant.id,
-            order: variant.order,
-            config: variant.config,
+      ...(resource.pins &&
+        resource.pins.length > 0 && {
+          pins: resource.pins.map((pin) => ({
+            id: pin.id,
+            order: pin.order,
+            variants: pin.variants.map((variant) => ({
+              id: variant.id,
+              order: variant.order,
+              config: variant.config,
+            })),
           })),
-        },
-      }),
+        }),
     }));
 
     return {
@@ -76,67 +71,102 @@ export class ResourcesService {
     };
   }
 
-  async createResource(
-    collectionId: string,
-    createResourceDto: CreateResourceDto,
-  ) {
-    const { type, data } = createResourceDto;
-
-    switch (type) {
-      case 'pin':
-        return await this.createPinResource(collectionId, data);
-
-      case 'shared-pin':
-        throw new BadRequestException(
-          `Resource type '${type}' is not yet implemented`,
-        );
-
-      case 'pin-group':
-        throw new BadRequestException(
-          `Resource type '${type}' is not yet implemented`,
-        );
-
-      case 'shared-pin-group':
-        throw new BadRequestException(
-          `Resource type '${type}' is not yet implemented`,
-        );
-
-      default:
-        throw new BadRequestException(`Unknown resource type: ${type}`);
-    }
-  }
-
-  private async createPinResource(collectionId: string, createPinDto: any) {
+  async create(collectionId: string, createResourceDto: CreateResourceDto) {
     return await this.dataSource.transaction(async (manager) => {
-      // Check collection exists
       const collection = await manager.findOne(CollectionEntity, {
         where: { id: collectionId },
       });
+
       if (!collection) throw new NotFoundException('Collection not found');
 
-      // Generate order for Resource
-      const maxOrderResult = await manager
+      const lastResource = await manager
         .createQueryBuilder(ResourceEntity, 'resource')
-        .select('MAX(resource.order)', 'maxOrder')
+        .select('resource.order')
         .where('resource.collectionId = :collectionId', { collectionId })
+        .orderBy('resource.order', 'DESC')
+        .limit(1)
         .getRawOne();
 
       const nextOrder = this.fractionalIndexingService.generateKeyBetween(
-        maxOrderResult?.maxOrder || null,
+        lastResource?.resource_order || null,
         null,
       );
 
-      // Create pin without collectionId - it's now independent
-      const createdPin = await this.pinsService.create(createPinDto);
+      const createdPins = [];
+      for (const createPinDto of createResourceDto.pins) {
+        const createdPin = await this.pinsService.createWithManager(
+          manager,
+          createPinDto,
+        );
+        createdPins.push(createdPin);
+      }
+
+      const resourceMeta = new ResourceMetaEntity();
+
+      // for shared Pin Groups
+      if (createResourceDto.sharedResourceId) {
+        const sharedResource = await manager.findOne(ResourceEntity, {
+          where: { id: createResourceDto.sharedResourceId },
+          relations: ['resourceMeta'],
+        });
+
+        if (!sharedResource) {
+          throw new NotFoundException('Shared resource not found');
+        }
+
+        resourceMeta.sharedResourceId = createResourceDto.sharedResourceId;
+        resourceMeta.firstResourceId =
+          sharedResource.resourceMeta.firstResourceId;
+
+        const currentHistory = sharedResource.resourceMeta.history || [];
+        const maxOrder = currentHistory.reduce(
+          (max, item) => (item.order > max ? item.order : max),
+          0,
+        );
+
+        const newHistoryItem = {
+          sharedMuralId: createResourceDto.sourceMuralId || '',
+          order: maxOrder + 1,
+        };
+
+        let newHistory = [...currentHistory, newHistoryItem];
+
+        if (newHistory.length > 5) {
+          const minOrder = newHistory.reduce(
+            (min, item) => (item.order < min ? item.order : min),
+            Infinity,
+          );
+          newHistory = newHistory.filter((item) => item.order !== minOrder);
+        }
+
+        resourceMeta.history = newHistory;
+      } else if (createResourceDto.pins.length > 1) {
+        // New Pin Group
+        resourceMeta.groupName = createResourceDto.groupName || null;
+      }
 
       const resource = manager.create(ResourceEntity, {
-        type: 'pin',
         collectionId,
         order: nextOrder,
-        pin: { id: createdPin.id },
+        pins: createdPins.map((p) => ({ id: p.id })),
+        resourceMeta,
       });
 
-      return await manager.save(resource);
+      const savedResource = await manager.save(resource);
+
+      if (
+        !createResourceDto.sharedResourceId &&
+        createResourceDto.pins.length > 1
+      ) {
+        savedResource.resourceMeta.firstResourceId = savedResource.id;
+        await manager.save(savedResource.resourceMeta);
+      }
+
+      return {
+        id: savedResource.id,
+        order: savedResource.order,
+        data: createdPins,
+      };
     });
   }
 
@@ -156,14 +186,27 @@ export class ResourcesService {
   async updatePinResource(resourceId: string, updatePinDto: UpdatePinDto) {
     const resource = await this.resourcesRepository.findOne({
       where: { id: resourceId },
-      relations: ['pin'],
+      relations: ['pins'],
     });
 
-    if (!resource || resource.type !== 'pin' || !resource.pin) {
+    if (!resource || !resource.pins || resource.pins.length === 0) {
       throw new NotFoundException('Pin Resource not found');
     }
 
-    return await this.pinsService.update(resource.pin.id, updatePinDto);
+    // Assuming we are updating the first pin for now, or we need to know which pin to update.
+    // The UpdatePinDto usually targets a specific pin ID, but here we are updating via resourceId.
+    // If resource has multiple pins, this endpoint is ambiguous.
+    // However, for now, let's assume single pin update or the user will provide pinId in the future.
+    // But wait, the previous logic was resource.pin.id.
+    // If we have multiple pins, which one?
+    // Let's assume the first one for backward compatibility or throw error if multiple?
+    // The user said "resource contém pins".
+    // If I update a resource, do I update all pins? No.
+    // The endpoint is `updatePinResource(resourceId, dto)`.
+    // It seems it was designed for 1-to-1.
+    // I will use the first pin for now and add a TODO.
+    const pinToUpdate = resource.pins[0];
+    return await this.pinsService.update(pinToUpdate.id, updatePinDto);
   }
 
   async reorder(resourceId: string, reorderDto: ReorderDto) {
@@ -189,7 +232,7 @@ export class ResourcesService {
   async findOne(resourceId: string) {
     const resource = await this.resourcesRepository
       .createQueryBuilder('resource')
-      .leftJoinAndSelect('resource.pin', 'pin')
+      .leftJoinAndSelect('resource.pins', 'pin')
       .leftJoinAndSelect('pin.variants', 'variants')
       .where('resource.id = :resourceId', { resourceId })
       .andWhere('resource.status = :status', { status: 'active' })

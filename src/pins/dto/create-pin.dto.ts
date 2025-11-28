@@ -14,4 +14,12 @@ export class CreatePinDto {
   @ValidateNested({ each: true })
   @Type(() => CreateVariantDto)
   variants: CreateVariantDto[];
+
+  @IsOptional()
+  @IsString()
+  sharedPinId?: string;
+
+  @IsOptional()
+  @IsString()
+  sourceMuralId?: string;
 }

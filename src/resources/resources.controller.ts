@@ -35,10 +35,7 @@ export class ResourcesController {
     @Param('collectionId', new ParseUUIDPipe()) collectionId: string,
     @Body() createResourceDto: CreateResourceDto,
   ) {
-    return this.resourcesService.createResource(
-      collectionId,
-      createResourceDto,
-    );
+    return this.resourcesService.create(collectionId, createResourceDto);
   }
 
   @UseGuards(JwtAuthGuard)

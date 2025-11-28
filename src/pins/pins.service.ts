@@ -8,6 +8,7 @@ import { DataSource } from 'typeorm';
 
 import { VariantEntity } from './entities/variant.entity';
 import { PinEntity } from './entities/pin.entity';
+import { PinMetaEntity } from './entities/pin-meta.entity';
 
 import { CreateVariantDto } from './dto/variant/create-variant.dto';
 import { CreatePinDto } from './dto/create-pin.dto';
@@ -27,46 +28,100 @@ export class PinsService {
 
   async create(createPinDto: CreatePinDto): Promise<PinDto> {
     return await this.dataSource.transaction(async (manager) => {
-      if (createPinDto.variants && createPinDto.variants.length > 0) {
-        this.validateVariantsOrdering(createPinDto.variants);
-      }
-
-      const pin = manager.create(PinEntity, {});
-
-      const savedPin = await manager.save(pin);
-
-      const enrichedVariants = await this.enrichVariantsWithIntegrationData(
-        createPinDto.variants || [],
-      );
-
-      const variantEntities: VariantEntity[] = [];
-
-      for (const variantDto of enrichedVariants) {
-        const variantEntity = manager.create(VariantEntity, {
-          pinId: savedPin.id,
-          order: variantDto.order,
-          config: variantDto.config,
-        });
-
-        const savedVariant = await manager.save(variantEntity);
-        variantEntities.push(savedVariant);
-      }
-
-      const response: PinDto = {
-        id: savedPin.id,
-        order: savedPin.order,
-        variants: variantEntities.map((variant) => ({
-          id: variant.id,
-          order: variant.order,
-          config: variant.config,
-        })),
-      };
-
-      return response;
+      return this.createWithManager(manager, createPinDto);
     });
   }
 
-  private async enrichVariantsWithIntegrationData(
+  async createWithManager(
+    manager: any,
+    createPinDto: CreatePinDto,
+  ): Promise<PinDto> {
+    if (createPinDto.variants && createPinDto.variants.length > 0) {
+      this.validateVariantsOrdering(createPinDto.variants);
+    }
+
+    const pinMeta = new PinMetaEntity();
+
+    if (createPinDto.sharedPinId) {
+      const sharedPin = await manager.findOne(PinEntity, {
+        where: { id: createPinDto.sharedPinId },
+        relations: ['pinMeta'],
+      });
+
+      if (!sharedPin) {
+        throw new NotFoundException('Shared pin not found');
+      }
+
+      pinMeta.sharedPinId = createPinDto.sharedPinId;
+      pinMeta.firstPinId = sharedPin.pinMeta.firstPinId;
+
+      const currentHistory = sharedPin.pinMeta.history || [];
+      const maxOrder = currentHistory.reduce(
+        (max: number, item: any) => (item.order > max ? item.order : max),
+        0,
+      );
+
+      const newHistoryItem = {
+        sharedMuralId: createPinDto.sourceMuralId || '',
+        order: maxOrder + 1,
+      };
+
+      let newHistory = [...currentHistory, newHistoryItem];
+
+      if (newHistory.length > 5) {
+        const minOrder = newHistory.reduce(
+          (min: number, item: any) => (item.order < min ? item.order : min),
+          Infinity,
+        );
+        newHistory = newHistory.filter((item) => item.order !== minOrder);
+      }
+
+      pinMeta.history = newHistory;
+    }
+
+    const pin = manager.create(PinEntity, {
+      pinMeta,
+    });
+
+    const savedPin = await manager.save(pin);
+
+    const enrichedVariants = await this.enrichIntegrationVariants(
+      createPinDto.variants || [],
+    );
+
+    const variantEntities: VariantEntity[] = [];
+
+    for (const variantDto of enrichedVariants) {
+      const variantEntity = manager.create(VariantEntity, {
+        pinId: savedPin.id,
+        order: variantDto.order,
+        config: variantDto.config,
+      });
+
+      const savedVariant = await manager.save(variantEntity);
+      variantEntities.push(savedVariant);
+    }
+
+    const response: PinDto = {
+      id: savedPin.id,
+      order: savedPin.order,
+      variants: variantEntities.map((variant) => ({
+        id: variant.id,
+        order: variant.order,
+        config: variant.config,
+      })),
+    };
+
+    if (!createPinDto.sharedPinId) {
+      // New pin, set firstPinId to its own ID
+      savedPin.pinMeta.firstPinId = savedPin.id;
+      await manager.save(savedPin.pinMeta);
+    }
+
+    return response;
+  }
+
+  private async enrichIntegrationVariants(
     variants: CreateVariantDto[],
   ): Promise<CreateVariantDto[]> {
     if (!variants || variants.length === 0) {
