@@ -86,4 +86,39 @@ export class FractionalIndexingService {
 
     return result;
   }
+
+  /**
+   * Validates that an array of order strings is in correct ascending sequence
+   * @param orders Array of order strings to validate
+   * @returns true if orders are in valid ascending sequence, false otherwise
+   */
+  validateOrderSequence(orders: (string | undefined | null)[]): boolean {
+    if (orders.length === 0) return true;
+    if (orders.length === 1) return orders[0] != null;
+
+    for (let i = 0; i < orders.length; i++) {
+      const current = orders[i];
+
+      // All orders must be defined
+      if (current == null || current === '') return false;
+
+      // Check if current order is greater than previous
+      if (i > 0) {
+        const previous = orders[i - 1];
+        if (previous == null || current <= previous) {
+          return false;
+        }
+      }
+
+      // Check if current order is less than next
+      if (i < orders.length - 1) {
+        const next = orders[i + 1];
+        if (next != null && current >= next) {
+          return false;
+        }
+      }
+    }
+
+    return true;
+  }
 }

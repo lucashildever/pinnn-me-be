@@ -47,7 +47,6 @@ describe('ResourcesService', () => {
   };
 
   beforeEach(async () => {
-    // QueryBuilder Mock
     queryBuilder = {
       select: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
@@ -62,7 +61,6 @@ describe('ResourcesService', () => {
       getManyAndCount: jest.fn(),
     } as any;
 
-    // EntityManager Mock
     mockEntityManager = {
       findOne: jest.fn(),
       create: jest.fn(),
@@ -70,7 +68,6 @@ describe('ResourcesService', () => {
       createQueryBuilder: jest.fn().mockReturnValue(queryBuilder),
     } as any;
 
-    // DataSource Mock with transaction support
     dataSource = {
       transaction: jest.fn((callback) => callback(mockEntityManager)),
     } as any;
@@ -117,7 +114,6 @@ describe('ResourcesService', () => {
     });
 
     it('should create a resource with a single pin successfully', async () => {
-      // Arrange
       const createResourceDto: CreateResourceDto = {
         pins: [
           {
@@ -131,8 +127,8 @@ describe('ResourcesService', () => {
         ],
       };
 
-      mockEntityManager.findOne.mockResolvedValueOnce(mockCollection); // Collection exists
-      queryBuilder.getRawOne.mockResolvedValueOnce(null); // No previous resources
+      mockEntityManager.findOne.mockResolvedValueOnce(mockCollection);
+      queryBuilder.getRawOne.mockResolvedValueOnce(null);
       fractionalIndexingService.generateKeyBetween.mockReturnValue('a0');
       pinsService.createWithManager.mockResolvedValueOnce(mockPinDto);
 
@@ -147,10 +143,8 @@ describe('ResourcesService', () => {
       mockEntityManager.create.mockReturnValueOnce(mockResource as any);
       mockEntityManager.save.mockResolvedValueOnce(mockResource);
 
-      // Act
       const result = await service.create(mockCollectionId, createResourceDto);
 
-      // Assert
       expect(result).toEqual({
         id: mockResourceId,
         order: 'a0',
@@ -173,7 +167,6 @@ describe('ResourcesService', () => {
     });
 
     it('should throw NotFoundException when collection does not exist', async () => {
-      // Arrange
       const createResourceDto: CreateResourceDto = {
         pins: [
           {
@@ -184,9 +177,8 @@ describe('ResourcesService', () => {
         ],
       };
 
-      mockEntityManager.findOne.mockResolvedValueOnce(null); // Collection not found
+      mockEntityManager.findOne.mockResolvedValueOnce(null);
 
-      // Act & Assert
       await expect(
         service.create(mockCollectionId, createResourceDto),
       ).rejects.toThrow(new NotFoundException('Collection not found'));
@@ -195,7 +187,6 @@ describe('ResourcesService', () => {
     });
 
     it('should generate correct fractional indexing order based on last resource', async () => {
-      // Arrange
       const createResourceDto: CreateResourceDto = {
         pins: [
           {
@@ -221,10 +212,8 @@ describe('ResourcesService', () => {
       mockEntityManager.create.mockReturnValueOnce(mockResource as any);
       mockEntityManager.save.mockResolvedValueOnce(mockResource);
 
-      // Act
       await service.create(mockCollectionId, createResourceDto);
 
-      // Assert
       expect(fractionalIndexingService.generateKeyBetween).toHaveBeenCalledWith(
         'a0',
         null,
@@ -232,7 +221,6 @@ describe('ResourcesService', () => {
     });
 
     it('should rollback pins if resource creation fails (transaction atomicity)', async () => {
-      // Arrange
       const createResourceDto: CreateResourceDto = {
         pins: [
           {
@@ -248,31 +236,25 @@ describe('ResourcesService', () => {
       fractionalIndexingService.generateKeyBetween.mockReturnValue('a0');
       pinsService.createWithManager.mockResolvedValueOnce(mockPinDto);
 
-      // Simulate resource save failure
       const mockError = new Error('Database error');
       mockEntityManager.save.mockRejectedValueOnce(mockError);
 
-      // Mock transaction to propagate error
       dataSource.transaction.mockImplementationOnce(async (callback: any) => {
         try {
           return await callback(mockEntityManager);
         } catch (error) {
-          throw error; // Transaction should rollback
+          throw error;
         }
       });
 
-      // Act & Assert
       await expect(
         service.create(mockCollectionId, createResourceDto),
       ).rejects.toThrow('Database error');
 
-      // Pin was created in the same transaction,
-      // so it should be rolled back automatically by TypeORM
       expect(pinsService.createWithManager).toHaveBeenCalled();
     });
 
     it('should create shared resource with history', async () => {
-      // Arrange
       const sharedResourceId = 'shared-resource-id';
       const firstResourceId = 'first-resource-id';
 
@@ -300,8 +282,8 @@ describe('ResourcesService', () => {
       } as ResourceEntity;
 
       mockEntityManager.findOne
-        .mockResolvedValueOnce(mockCollection) // Collection
-        .mockResolvedValueOnce(sharedResource); // Shared resource
+        .mockResolvedValueOnce(mockCollection)
+        .mockResolvedValueOnce(sharedResource);
 
       queryBuilder.getRawOne.mockResolvedValueOnce(null);
       fractionalIndexingService.generateKeyBetween.mockReturnValue('a0');
@@ -325,10 +307,8 @@ describe('ResourcesService', () => {
       mockEntityManager.create.mockReturnValueOnce(mockResource as any);
       mockEntityManager.save.mockResolvedValueOnce(mockResource);
 
-      // Act
       const result = await service.create(mockCollectionId, createResourceDto);
 
-      // Assert
       expect(result.id).toBe(mockResourceId);
       expect(mockEntityManager.findOne).toHaveBeenCalledWith(ResourceEntity, {
         where: { id: sharedResourceId },
@@ -337,7 +317,6 @@ describe('ResourcesService', () => {
     });
 
     it('should limit history to 5 items by removing oldest', async () => {
-      // Arrange
       const sharedResourceId = 'shared-resource-id';
 
       const createResourceDto: CreateResourceDto = {
@@ -352,7 +331,6 @@ describe('ResourcesService', () => {
         ],
       };
 
-      // History already has 5 items
       const sharedResource = {
         id: sharedResourceId,
         resourceMeta: {
@@ -388,17 +366,14 @@ describe('ResourcesService', () => {
 
       mockEntityManager.save.mockResolvedValue({} as any);
 
-      // Act
       await service.create(mockCollectionId, createResourceDto);
 
-      // Assert
       expect(savedResourceMeta.history).toHaveLength(5);
-      expect(savedResourceMeta.history[0].order).toBe(2); // Oldest (order 1) removed
-      expect(savedResourceMeta.history[4].order).toBe(6); // New item added
+      expect(savedResourceMeta.history[0].order).toBe(2);
+      expect(savedResourceMeta.history[4].order).toBe(6);
     });
 
     it('should create pin group and set firstResourceId', async () => {
-      // Arrange
       const createResourceDto: CreateResourceDto = {
         groupName: 'Test Group',
         pins: [
@@ -433,20 +408,17 @@ describe('ResourcesService', () => {
 
       mockEntityManager.create.mockReturnValueOnce(mockResource);
       mockEntityManager.save
-        .mockResolvedValueOnce(mockResource) // First save (resource)
-        .mockResolvedValueOnce(mockResourceMeta); // Second save (resourceMeta with firstResourceId)
+        .mockResolvedValueOnce(mockResource)
+        .mockResolvedValueOnce(mockResourceMeta);
 
-      // Act
       await service.create(mockCollectionId, createResourceDto);
 
-      // Assert
       expect(pinsService.createWithManager).toHaveBeenCalledTimes(2);
       expect(mockEntityManager.save).toHaveBeenCalledTimes(2);
       expect(mockResourceMeta.firstResourceId).toBe(mockResourceId);
     });
 
     it('should create resource with multiple pins', async () => {
-      // Arrange
       const createResourceDto: CreateResourceDto = {
         pins: [
           {
@@ -486,10 +458,8 @@ describe('ResourcesService', () => {
       mockEntityManager.create.mockReturnValueOnce(mockResource as any);
       mockEntityManager.save.mockResolvedValueOnce(mockResource as any);
 
-      // Act
       const result = await service.create(mockCollectionId, createResourceDto);
 
-      // Assert
       expect(pinsService.createWithManager).toHaveBeenCalledTimes(3);
       expect(result.data).toHaveLength(3);
     });
