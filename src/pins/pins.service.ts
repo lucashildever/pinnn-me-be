@@ -42,43 +42,6 @@ export class PinsService {
 
     const pinMeta = new PinMetaEntity();
 
-    if (createPinDto.sharedPinId) {
-      const sharedPin = await manager.findOne(PinEntity, {
-        where: { id: createPinDto.sharedPinId },
-        relations: ['pinMeta'],
-      });
-
-      if (!sharedPin) {
-        throw new NotFoundException('Shared pin not found');
-      }
-
-      pinMeta.sharedPinId = createPinDto.sharedPinId;
-      pinMeta.firstPinId = sharedPin.pinMeta.firstPinId;
-
-      const currentHistory = sharedPin.pinMeta.history || [];
-      const maxOrder = currentHistory.reduce(
-        (max: number, item: any) => (item.order > max ? item.order : max),
-        0,
-      );
-
-      const newHistoryItem = {
-        sharedMuralId: createPinDto.sourceMuralId || '',
-        order: maxOrder + 1,
-      };
-
-      let newHistory = [...currentHistory, newHistoryItem];
-
-      if (newHistory.length > 5) {
-        const minOrder = newHistory.reduce(
-          (min: number, item: any) => (item.order < min ? item.order : min),
-          Infinity,
-        );
-        newHistory = newHistory.filter((item) => item.order !== minOrder);
-      }
-
-      pinMeta.history = newHistory;
-    }
-
     const pin = manager.create(PinEntity, {
       pinMeta,
     });
@@ -112,11 +75,9 @@ export class PinsService {
       })),
     };
 
-    if (!createPinDto.sharedPinId) {
-      // New pin, set firstPinId to its own ID
-      savedPin.pinMeta.firstPinId = savedPin.id;
-      await manager.save(savedPin.pinMeta);
-    }
+    // New pin, set firstPinId to its own ID
+    savedPin.pinMeta.firstPinId = savedPin.id;
+    await manager.save(savedPin.pinMeta);
 
     return response;
   }

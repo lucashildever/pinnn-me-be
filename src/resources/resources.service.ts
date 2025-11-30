@@ -7,7 +7,6 @@ import { PinsService } from 'src/pins/pins.service';
 import { CollectionEntity } from 'src/collections/entities/collection.entity';
 import { FractionalIndexingService } from 'src/common/services/fractional-indexing.service';
 import { PaginationQueryDto } from 'src/pins/dto/pagination/pagination-query.dto';
-import { CreateResourceDto } from './dto/create-resource.dto';
 import { PaginatedResourcesResponseDto } from './dto/paginated-resources-response.dto';
 import { UpdatePinDto } from 'src/pins/dto/update-pin.dto';
 import { ReorderDto } from 'src/pins/dto/reorder.dto';
@@ -18,6 +17,8 @@ import { SharePinGroupResourceDto } from './dto/share-pin-group-resource.dto';
 import { PinEntity } from 'src/pins/entities/pin.entity';
 import { PinMetaEntity } from 'src/pins/entities/pin-meta.entity';
 import { VariantEntity } from 'src/pins/entities/variant.entity';
+import { ResourceDto } from './dto/resource.dto';
+import { CreateVariantDto } from 'src/pins/dto/variant/create-variant.dto';
 
 @Injectable()
 export class ResourcesService {
@@ -52,20 +53,11 @@ export class ResourcesService {
 
     const transformedResources = resources.map((resource) => ({
       id: resource.id,
-
       order: resource.order,
-      ...(resource.pins &&
-        resource.pins.length > 0 && {
-          pins: resource.pins.map((pin) => ({
-            id: pin.id,
-            order: pin.order,
-            variants: pin.variants.map((variant) => ({
-              id: variant.id,
-              order: variant.order,
-              config: variant.config,
-            })),
-          })),
-        }),
+      pins:
+        resource.pins && resource.pins.length > 0
+          ? resource.pins.map((pin) => this.mapPinToDto(pin))
+          : [],
     }));
 
     return {
@@ -78,134 +70,16 @@ export class ResourcesService {
     };
   }
 
-  async create(collectionId: string, createResourceDto: CreateResourceDto) {
-    return await this.dataSource.transaction(async (manager) => {
-      const collection = await manager.findOne(CollectionEntity, {
-        where: { id: collectionId },
-      });
-
-      if (!collection) throw new NotFoundException('Collection not found');
-
-      const lastResource = await manager
-        .createQueryBuilder(ResourceEntity, 'resource')
-        .select('resource.order')
-        .where('resource.collectionId = :collectionId', { collectionId })
-        .orderBy('resource.order', 'DESC')
-        .limit(1)
-        .getRawOne();
-
-      const nextOrder = this.fractionalIndexingService.generateKeyBetween(
-        lastResource?.resource_order || null,
-        null,
-      );
-
-      const createdPins = [];
-      for (const createPinDto of createResourceDto.pins) {
-        const createdPin = await this.pinsService.createWithManager(
-          manager,
-          createPinDto,
-        );
-        createdPins.push(createdPin);
-      }
-
-      const resourceMeta = new ResourceMetaEntity();
-
-      // for shared Pin Groups
-      if (createResourceDto.sharedResourceId) {
-        const sharedResource = await manager.findOne(ResourceEntity, {
-          where: { id: createResourceDto.sharedResourceId },
-          relations: ['resourceMeta'],
-        });
-
-        if (!sharedResource) {
-          throw new NotFoundException('Shared resource not found');
-        }
-
-        resourceMeta.sharedResourceId = createResourceDto.sharedResourceId;
-        resourceMeta.firstResourceId =
-          sharedResource.resourceMeta.firstResourceId;
-
-        const currentHistory = sharedResource.resourceMeta.history || [];
-        const maxOrder = currentHistory.reduce(
-          (max, item) => (item.order > max ? item.order : max),
-          0,
-        );
-
-        const newHistoryItem = {
-          sharedMuralId: createResourceDto.sourceMuralId || '',
-          order: maxOrder + 1,
-        };
-
-        let newHistory = [...currentHistory, newHistoryItem];
-
-        if (newHistory.length > 5) {
-          const minOrder = newHistory.reduce(
-            (min, item) => (item.order < min ? item.order : min),
-            Infinity,
-          );
-          newHistory = newHistory.filter((item) => item.order !== minOrder);
-        }
-
-        resourceMeta.history = newHistory;
-      } else if (createResourceDto.pins.length > 1) {
-        // New Pin Group
-        resourceMeta.groupName = createResourceDto.groupName || null;
-      }
-
-      const resource = manager.create(ResourceEntity, {
-        collectionId,
-        order: nextOrder,
-        pins: createdPins.map((p) => ({ id: p.id })),
-        resourceMeta,
-      });
-
-      const savedResource = await manager.save(resource);
-
-      if (
-        !createResourceDto.sharedResourceId &&
-        createResourceDto.pins.length > 1
-      ) {
-        savedResource.resourceMeta.firstResourceId = savedResource.id;
-        await manager.save(savedResource.resourceMeta);
-      }
-
-      return {
-        id: savedResource.id,
-        order: savedResource.order,
-        data: createdPins,
-      };
-    });
-  }
-
   async createPinResource(
     collectionId: string,
     createPinResourceDto: CreatePinResourceDto,
-  ) {
+  ): Promise<ResourceDto> {
     return await this.dataSource.transaction(async (manager) => {
       const collection = await manager.findOne(CollectionEntity, {
         where: { id: collectionId },
       });
 
       if (!collection) throw new NotFoundException('Collection not found');
-
-      const lastResource = await manager
-        .createQueryBuilder(ResourceEntity, 'resource')
-        .select('resource.order')
-        .where('resource.collectionId = :collectionId', { collectionId })
-        .orderBy('resource.order', 'DESC')
-        .limit(1)
-        .getRawOne();
-
-      const nextOrder = this.fractionalIndexingService.generateKeyBetween(
-        lastResource?.resource_order || null,
-        null,
-      );
-
-      const resource = manager.create(ResourceEntity, {
-        collectionId,
-        order: nextOrder,
-      });
-      const savedResource = await manager.save(resource);
 
       const variantOrders = createPinResourceDto.variants.map((v) => v.order);
       if (
@@ -216,9 +90,26 @@ export class ResourcesService {
         );
       }
 
-      const pinMeta = manager.create(PinMetaEntity, {
-        history: [],
+      const lastResource = await manager
+        .createQueryBuilder(ResourceEntity, 'resource')
+        .select('resource.order')
+        .where('resource.collectionId = :collectionId', { collectionId })
+        .orderBy('resource.order', 'DESC')
+        .limit(1)
+        .getRawOne();
+
+      const nextOrder = this.fractionalIndexingService.generateKeyBetween(
+        lastResource?.resource_order || null,
+        null,
+      );
+
+      const resource = manager.create(ResourceEntity, {
+        collectionId,
+        order: nextOrder,
       });
+      const savedResource = await manager.save(resource);
+
+      const pinMeta = manager.create(PinMetaEntity);
 
       const pin = manager.create(PinEntity, {
         resource: savedResource,
@@ -236,7 +127,178 @@ export class ResourcesService {
       return {
         id: savedResource.id,
         order: savedResource.order,
-        data: [savedPin],
+        pins: [this.mapPinToDto(savedPin)],
+      };
+    });
+  }
+
+  async createPinGroupResource(
+    collectionId: string,
+    createPinGroupResourceDto: CreatePinGroupResourceDto,
+  ): Promise<ResourceDto> {
+    return await this.dataSource.transaction(async (manager) => {
+      const collection = await manager.findOne(CollectionEntity, {
+        where: { id: collectionId },
+      });
+
+      if (!collection) throw new NotFoundException('Collection not found');
+
+      const pinOrders = createPinGroupResourceDto.pins.map((pin) => pin.order);
+
+      if (!this.fractionalIndexingService.validateOrderSequence(pinOrders)) {
+        throw new NotFoundException(
+          'Pin group has invalid order sequence. Pins must be in correct ascending order.',
+        );
+      }
+
+      const lastResource = await manager
+        .createQueryBuilder(ResourceEntity, 'resource')
+        .select('resource.order')
+        .where('resource.collectionId = :collectionId', { collectionId })
+        .orderBy('resource.order', 'DESC')
+        .limit(1)
+        .getRawOne();
+
+      const nextOrder = this.fractionalIndexingService.generateKeyBetween(
+        lastResource?.resource_order || null,
+        null,
+      );
+
+      const resourceMeta = manager.create(ResourceMetaEntity, {
+        groupName: createPinGroupResourceDto.groupName,
+      });
+
+      const resource = manager.create(ResourceEntity, {
+        collectionId,
+        order: nextOrder,
+        resourceMeta,
+      });
+      const savedResource = await manager.save(resource);
+
+      savedResource.resourceMeta.firstResourceId = savedResource.id;
+      await manager.save(savedResource.resourceMeta);
+
+      const createdPins: PinEntity[] = [];
+
+      for (const pinDto of createPinGroupResourceDto.pins) {
+        if (this.isSharePinDto(pinDto)) {
+          // shared pins logic
+          const sharedPin = await manager.findOne(PinEntity, {
+            where: { id: pinDto.sharedPinId },
+            relations: [
+              'pinMeta',
+              'variants',
+              'resource',
+              'resource.collection',
+            ],
+          });
+
+          if (!sharedPin) {
+            throw new NotFoundException(
+              `Shared pin ${pinDto.sharedPinId} not found`,
+            );
+          }
+
+          // Validate that the shared pin belongs to the source mural
+          if (
+            !sharedPin.resource?.collection?.muralId ||
+            sharedPin.resource.collection.muralId !==
+              (pinDto.sourceMuralId || '')
+          ) {
+            throw new NotFoundException(
+              `Shared pin ${pinDto.sharedPinId} does not belong to the specified source mural`,
+            );
+          }
+
+          if (!sharedPin.pinMeta?.firstPinId) {
+            throw new NotFoundException(
+              `Shared pin ${pinDto.sharedPinId} has invalid metadata: missing firstPinId`,
+            );
+          }
+
+          if (
+            pinDto.additionalVariants &&
+            pinDto.additionalVariants.length > 0
+          ) {
+            const variantOrders = pinDto.additionalVariants.map(
+              (v: CreateVariantDto) => v.order,
+            );
+            if (
+              !this.fractionalIndexingService.validateOrderSequence(
+                variantOrders,
+              )
+            ) {
+              throw new NotFoundException(
+                `Pin contains variants with invalid order sequence. Variants must be in correct ascending order.`,
+              );
+            }
+          }
+
+          const currentHistory = sharedPin.pinMeta?.history || [];
+          const newHistory = this.generateHistory(
+            currentHistory,
+            pinDto.sourceMuralId || '',
+          );
+
+          const pinMeta = manager.create(PinMetaEntity, {
+            firstPinId: sharedPin.pinMeta.firstPinId,
+            sharedPinId: pinDto.sharedPinId,
+            history: newHistory,
+          });
+
+          const variants = pinDto.additionalVariants
+            ? pinDto.additionalVariants.map((v: CreateVariantDto) =>
+                manager.create(VariantEntity, v),
+              )
+            : [];
+
+          const pin = manager.create(PinEntity, {
+            resource: savedResource,
+            variants,
+            pinMeta,
+            order: pinDto.order,
+          });
+
+          createdPins.push(await manager.save(pin));
+        } else {
+          // New pin logic
+          const variantOrders = pinDto.variants.map(
+            (v: CreateVariantDto) => v.order,
+          );
+          if (
+            !this.fractionalIndexingService.validateOrderSequence(variantOrders)
+          ) {
+            throw new NotFoundException(
+              `Pin contains variants with invalid order sequence. Variants must be in correct ascending order.`,
+            );
+          }
+
+          const pinMeta = manager.create(PinMetaEntity);
+
+          const variants = pinDto.variants.map((v: CreateVariantDto) =>
+            manager.create(VariantEntity, v),
+          );
+
+          const pin = manager.create(PinEntity, {
+            resource: savedResource,
+            variants,
+            pinMeta,
+            order: pinDto.order,
+          });
+
+          const savedPin = await manager.save(pin);
+
+          savedPin.pinMeta.firstPinId = savedPin.id;
+          await manager.save(savedPin.pinMeta);
+
+          createdPins.push(savedPin);
+        }
+      }
+
+      return {
+        id: savedResource.id,
+        order: savedResource.order,
+        pins: createdPins.map((pin) => this.mapPinToDto(pin)),
       };
     });
   }
@@ -244,7 +306,7 @@ export class ResourcesService {
   async sharePinResource(
     collectionId: string,
     sharePinResourceDto: SharePinResourceDto,
-  ) {
+  ): Promise<ResourceDto> {
     return await this.dataSource.transaction(async (manager) => {
       const collection = await manager.findOne(CollectionEntity, {
         where: { id: collectionId },
@@ -254,10 +316,20 @@ export class ResourcesService {
 
       const sharedPin = await manager.findOne(PinEntity, {
         where: { id: sharePinResourceDto.sharedPinId },
-        relations: ['pinMeta', 'variants'],
+        relations: ['pinMeta', 'variants', 'resource', 'resource.collection'],
       });
 
       if (!sharedPin) throw new NotFoundException('Shared pin not found');
+
+      if (
+        !sharedPin.resource?.collection?.muralId ||
+        sharedPin.resource.collection.muralId !==
+          sharePinResourceDto.sourceMuralId
+      ) {
+        throw new NotFoundException(
+          'Shared pin does not belong to the specified source mural',
+        );
+      }
 
       const lastResource = await manager
         .createQueryBuilder(ResourceEntity, 'resource')
@@ -325,152 +397,7 @@ export class ResourcesService {
       return {
         id: savedResource.id,
         order: savedResource.order,
-        data: [savedPin],
-      };
-    });
-  }
-
-  async createPinGroupResource(
-    collectionId: string,
-    createPinGroupResourceDto: CreatePinGroupResourceDto,
-  ) {
-    return await this.dataSource.transaction(async (manager) => {
-      const collection = await manager.findOne(CollectionEntity, {
-        where: { id: collectionId },
-      });
-
-      if (!collection) throw new NotFoundException('Collection not found');
-
-      const lastResource = await manager
-        .createQueryBuilder(ResourceEntity, 'resource')
-        .select('resource.order')
-        .where('resource.collectionId = :collectionId', { collectionId })
-        .orderBy('resource.order', 'DESC')
-        .limit(1)
-        .getRawOne();
-
-      const nextOrder = this.fractionalIndexingService.generateKeyBetween(
-        lastResource?.resource_order || null,
-        null,
-      );
-
-      const resourceMeta = manager.create(ResourceMetaEntity, {
-        groupName: createPinGroupResourceDto.groupName,
-        history: [],
-      });
-
-      const resource = manager.create(ResourceEntity, {
-        collectionId,
-        order: nextOrder,
-        resourceMeta,
-      });
-      const savedResource = await manager.save(resource);
-
-      savedResource.resourceMeta.firstResourceId = savedResource.id;
-      await manager.save(savedResource.resourceMeta);
-
-      const pinOrders = createPinGroupResourceDto.pins.map((pin) => pin.order);
-
-      if (!this.fractionalIndexingService.validateOrderSequence(pinOrders)) {
-        throw new NotFoundException(
-          'Pin group has invalid order sequence. Pins must be in correct ascending order.',
-        );
-      }
-
-      const createdPins: PinEntity[] = [];
-
-      for (const pinDto of createPinGroupResourceDto.pins) {
-        if (pinDto.sharedPinId) {
-          // shared pins logic
-          const sharedPin = await manager.findOne(PinEntity, {
-            where: { id: pinDto.sharedPinId },
-            relations: ['pinMeta', 'variants'],
-          });
-
-          if (!sharedPin) {
-            throw new NotFoundException(
-              `Shared pin ${pinDto.sharedPinId} not found`,
-            );
-          }
-
-          if (!sharedPin.pinMeta?.firstPinId) {
-            throw new NotFoundException(
-              `Shared pin ${pinDto.sharedPinId} has invalid metadata: missing firstPinId`,
-            );
-          }
-
-          const currentHistory = sharedPin.pinMeta?.history || [];
-          const newHistory = this.generateHistory(
-            currentHistory,
-            pinDto.sourceMuralId || '',
-          );
-
-          const pinMeta = manager.create(PinMetaEntity, {
-            firstPinId: sharedPin.pinMeta.firstPinId,
-            sharedPinId: pinDto.sharedPinId,
-            history: newHistory,
-          });
-
-          const variantOrders = pinDto.variants.map((v) => v.order);
-          if (
-            !this.fractionalIndexingService.validateOrderSequence(variantOrders)
-          ) {
-            throw new NotFoundException(
-              `Pin contains variants with invalid order sequence. Variants must be in correct ascending order.`,
-            );
-          }
-
-          const variants = pinDto.variants.map((v) =>
-            manager.create(VariantEntity, v),
-          );
-
-          const pin = manager.create(PinEntity, {
-            resource: savedResource,
-            variants,
-            pinMeta,
-            order: pinDto.order,
-          });
-
-          createdPins.push(await manager.save(pin));
-        } else {
-          // New pin logic
-          const pinMeta = manager.create(PinMetaEntity, {
-            history: [],
-          });
-
-          const variantOrders = pinDto.variants.map((v) => v.order);
-          if (
-            !this.fractionalIndexingService.validateOrderSequence(variantOrders)
-          ) {
-            throw new NotFoundException(
-              `Pin contains variants with invalid order sequence. Variants must be in correct ascending order.`,
-            );
-          }
-
-          const variants = pinDto.variants.map((v) =>
-            manager.create(VariantEntity, v),
-          );
-
-          const pin = manager.create(PinEntity, {
-            resource: savedResource,
-            variants,
-            pinMeta,
-            order: pinDto.order,
-          });
-
-          const savedPin = await manager.save(pin);
-
-          savedPin.pinMeta.firstPinId = savedPin.id;
-          await manager.save(savedPin.pinMeta);
-
-          createdPins.push(savedPin);
-        }
-      }
-
-      return {
-        id: savedResource.id,
-        order: savedResource.order,
-        data: createdPins,
+        pins: [this.mapPinToDto(savedPin)],
       };
     });
   }
@@ -478,7 +405,7 @@ export class ResourcesService {
   async sharePinGroupResource(
     collectionId: string,
     sharePinGroupResourceDto: SharePinGroupResourceDto,
-  ) {
+  ): Promise<ResourceDto> {
     return await this.dataSource.transaction(async (manager) => {
       const collection = await manager.findOne(CollectionEntity, {
         where: { id: collectionId },
@@ -488,11 +415,21 @@ export class ResourcesService {
 
       const sharedResource = await manager.findOne(ResourceEntity, {
         where: { id: sharePinGroupResourceDto.sharedResourceId },
-        relations: ['resourceMeta', 'pins', 'pins.variants', 'pins.pinMeta'],
+        relations: ['resourceMeta', 'collection'],
       });
 
       if (!sharedResource) {
         throw new NotFoundException('Shared resource not found');
+      }
+
+      if (
+        !sharedResource.collection?.muralId ||
+        sharedResource.collection.muralId !==
+          sharePinGroupResourceDto.sourceMuralId
+      ) {
+        throw new NotFoundException(
+          'Shared resource does not belong to the specified source mural',
+        );
       }
 
       if (!sharedResource.resourceMeta?.firstResourceId) {
@@ -536,52 +473,6 @@ export class ResourcesService {
 
       const createdPins: PinEntity[] = [];
 
-      // Copy pins from shared resource
-      for (const sharedPin of sharedResource.pins) {
-        if (!sharedPin.pinMeta?.firstPinId) {
-          throw new NotFoundException(
-            'Shared pin has invalid metadata: missing firstPinId',
-          );
-        }
-
-        const pinHistory = sharedPin.pinMeta?.history || [];
-        const newPinHistory = this.generateHistory(
-          pinHistory,
-          sharePinGroupResourceDto.sourceMuralId,
-        );
-
-        const pinMeta = manager.create(PinMetaEntity, {
-          firstPinId: sharedPin.pinMeta.firstPinId,
-          sharedPinId: sharedPin.id,
-          history: newPinHistory,
-        });
-
-        const variantOrders = sharedPin.variants.map((v) => v.order);
-        if (
-          !this.fractionalIndexingService.validateOrderSequence(variantOrders)
-        ) {
-          throw new NotFoundException(
-            'Shared pin contains variants with invalid order sequence.',
-          );
-        }
-
-        const variants = sharedPin.variants.map((v) =>
-          manager.create(VariantEntity, {
-            config: v.config,
-            order: v.order,
-          }),
-        );
-
-        const pin = manager.create(PinEntity, {
-          resource: savedResource,
-          variants,
-          pinMeta,
-          order: sharedPin.order,
-        });
-
-        createdPins.push(await manager.save(pin));
-      }
-
       if (sharePinGroupResourceDto.additionalPins) {
         const additionalPinOrders = sharePinGroupResourceDto.additionalPins.map(
           (pin) => pin.order,
@@ -598,15 +489,30 @@ export class ResourcesService {
         }
 
         for (const pinDto of sharePinGroupResourceDto.additionalPins) {
-          if (pinDto.sharedPinId) {
+          if (this.isSharePinDto(pinDto)) {
             const sharedPin = await manager.findOne(PinEntity, {
               where: { id: pinDto.sharedPinId },
-              relations: ['pinMeta', 'variants'],
+              relations: [
+                'pinMeta',
+                'variants',
+                'resource',
+                'resource.collection',
+              ],
             });
 
             if (!sharedPin) {
               throw new NotFoundException(
                 `Shared pin ${pinDto.sharedPinId} not found`,
+              );
+            }
+
+            if (
+              !sharedPin.resource?.collection?.muralId ||
+              sharedPin.resource.collection.muralId !==
+                (pinDto.sourceMuralId || '')
+            ) {
+              throw new NotFoundException(
+                `Shared pin ${pinDto.sharedPinId} does not belong to the specified source mural`,
               );
             }
 
@@ -628,20 +534,29 @@ export class ResourcesService {
               history: newHistory,
             });
 
-            const variantOrders = pinDto.variants.map((v) => v.order);
             if (
-              !this.fractionalIndexingService.validateOrderSequence(
-                variantOrders,
-              )
+              pinDto.additionalVariants &&
+              pinDto.additionalVariants.length > 0
             ) {
-              throw new NotFoundException(
-                'Pin contains variants with invalid order sequence.',
+              const variantOrders = pinDto.additionalVariants.map(
+                (v: CreateVariantDto) => v.order,
               );
+              if (
+                !this.fractionalIndexingService.validateOrderSequence(
+                  variantOrders,
+                )
+              ) {
+                throw new NotFoundException(
+                  'Pin contains variants with invalid order sequence.',
+                );
+              }
             }
 
-            const variants = pinDto.variants.map((v) =>
-              manager.create(VariantEntity, v),
-            );
+            const variants = pinDto.additionalVariants
+              ? pinDto.additionalVariants.map((v: CreateVariantDto) =>
+                  manager.create(VariantEntity, v),
+                )
+              : [];
 
             const pin = manager.create(PinEntity, {
               resource: savedResource,
@@ -652,11 +567,14 @@ export class ResourcesService {
 
             createdPins.push(await manager.save(pin));
           } else {
+            // New pin logic
             const pinMeta = manager.create(PinMetaEntity, {
               history: [],
             });
 
-            const variantOrders = pinDto.variants.map((v) => v.order);
+            const variantOrders = pinDto.variants.map(
+              (v: CreateVariantDto) => v.order,
+            );
             if (
               !this.fractionalIndexingService.validateOrderSequence(
                 variantOrders,
@@ -667,7 +585,7 @@ export class ResourcesService {
               );
             }
 
-            const variants = pinDto.variants.map((v) =>
+            const variants = pinDto.variants.map((v: CreateVariantDto) =>
               manager.create(VariantEntity, v),
             );
 
@@ -691,22 +609,22 @@ export class ResourcesService {
       return {
         id: savedResource.id,
         order: savedResource.order,
-        data: createdPins,
+        pins: createdPins.map((pin) => this.mapPinToDto(pin)),
       };
     });
   }
 
   private generateHistory(
-    currentHistory: { sharedMuralId: string; order: number }[],
+    currentHistory: { sourceMuralId: string; order: number }[],
     sourceMuralId: string,
-  ): { sharedMuralId: string; order: number }[] {
+  ): { sourceMuralId: string; order: number }[] {
     const maxOrder = currentHistory.reduce(
       (max, item) => (item.order > max ? item.order : max),
       0,
     );
 
     const newHistoryItem = {
-      sharedMuralId: sourceMuralId,
+      sourceMuralId: sourceMuralId,
       order: maxOrder + 1,
     };
 
@@ -721,6 +639,27 @@ export class ResourcesService {
     }
 
     return newHistory;
+  }
+
+  private mapPinToDto(pin: PinEntity) {
+    return {
+      id: pin.id,
+      order: pin.order,
+      variants: pin.variants.map((variant) => ({
+        id: variant.id,
+        order: variant.order,
+        config: variant.config,
+      })),
+    };
+  }
+
+  private isSharePinDto(pin: any): pin is {
+    sharedPinId: string;
+    sourceMuralId: string;
+    additionalVariants?: any[];
+    order?: string;
+  } {
+    return 'sharedPinId' in pin && pin.sharedPinId !== undefined;
   }
 
   async softDelete(resourceId: string) {
@@ -762,27 +701,64 @@ export class ResourcesService {
     return await this.pinsService.update(pinToUpdate.id, updatePinDto);
   }
 
-  async reorder(resourceId: string, reorderDto: ReorderDto) {
-    // Implement fractional indexing reorder for ResourceEntity
-    // Similar to PinsService.reorder but for Resources
+  async reorder(entityId: string, reorderDto: ReorderDto) {
     return await this.dataSource.transaction(async (manager) => {
-      const resource = await manager.findOne(ResourceEntity, {
-        where: { id: resourceId },
-      });
-      if (!resource) throw new NotFoundException('Resource not found');
+      const { type, newOrder } = reorderDto;
 
-      const { newOrder } = reorderDto;
+      switch (type) {
+        case 'resource': {
+          const resource = await manager.findOne(ResourceEntity, {
+            where: { id: entityId },
+          });
 
-      // Check for collisions (optional but good)
-      // Update order
-      resource.order = newOrder;
-      await manager.save(resource);
+          if (!resource) {
+            throw new NotFoundException('Resource not found');
+          }
 
-      return { message: 'Resource reordered successfully' };
+          resource.order = newOrder;
+          await manager.save(resource);
+
+          return { message: 'Resource reordered successfully' };
+        }
+
+        case 'pin': {
+          const pin = await manager.findOne(PinEntity, {
+            where: { id: entityId },
+          });
+
+          if (!pin) {
+            throw new NotFoundException('Pin not found');
+          }
+
+          pin.order = newOrder;
+          await manager.save(pin);
+
+          return { message: 'Pin reordered successfully' };
+        }
+
+        case 'variant': {
+          const variant = await manager.findOne(VariantEntity, {
+            where: { id: entityId },
+          });
+
+          if (!variant) {
+            throw new NotFoundException('Variant not found');
+          }
+
+          variant.order = newOrder;
+          await manager.save(variant);
+
+          return { message: 'Variant reordered successfully' };
+        }
+
+        default: {
+          throw new NotFoundException(`Invalid reorder type: ${type}`);
+        }
+      }
     });
   }
 
-  async findOne(resourceId: string) {
+  async findOne(resourceId: string): Promise<ResourceDto> {
     const resource = await this.resourcesRepository
       .createQueryBuilder('resource')
       .leftJoinAndSelect('resource.pins', 'pin')
@@ -792,6 +768,11 @@ export class ResourcesService {
       .getOne();
 
     if (!resource) throw new NotFoundException('Resource not found');
-    return resource;
+
+    return {
+      id: resource.id,
+      order: resource.order,
+      pins: resource.pins?.map((pin) => this.mapPinToDto(pin)) || [],
+    };
   }
 }

@@ -8,9 +8,9 @@ import {
 } from 'class-validator';
 
 export class ReorderDto {
-  @IsEnum(['pin', 'card'])
+  @IsEnum(['resource', 'pin', 'variant'])
   @IsNotEmpty()
-  type: 'pin' | 'card';
+  type: 'resource' | 'pin' | 'variant';
 
   @IsString()
   @IsNotEmpty()

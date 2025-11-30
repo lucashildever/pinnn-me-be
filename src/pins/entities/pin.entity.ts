@@ -1,11 +1,11 @@
 import {
   Entity,
   Column,
-  OneToMany,
-  PrimaryGeneratedColumn,
   OneToOne,
-  JoinColumn,
+  OneToMany,
   ManyToOne,
+  JoinColumn,
+  PrimaryGeneratedColumn,
 } from 'typeorm';
 import { TimestampEntity } from 'src/common/entities/timestamp.entity';
 import { VariantEntity } from './variant.entity';
@@ -17,8 +17,7 @@ export class PinEntity extends TimestampEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @OneToOne(() => PinMetaEntity, { cascade: true })
-  @JoinColumn({ name: 'pin_meta_id' })
+  @OneToOne(() => PinMetaEntity, (pinMeta) => pinMeta.pin, { cascade: true })
   pinMeta: PinMetaEntity;
 
   @ManyToOne(() => ResourceEntity, (resource) => resource.pins, {

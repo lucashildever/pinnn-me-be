@@ -10,16 +10,17 @@ import {
   Controller,
   ParseUUIDPipe,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth-guard';
 import { ResourcesService } from './resources.service';
 import { PaginationQueryDto } from 'src/pins/dto/pagination/pagination-query.dto';
-import { CreateResourceDto } from './dto/create-resource.dto';
 import { UpdatePinDto } from 'src/pins/dto/update-pin.dto';
 import { ReorderDto } from 'src/pins/dto/reorder.dto';
 import { CreatePinResourceDto } from './dto/create-pin-resource.dto';
 import { SharePinResourceDto } from './dto/share-pin-resource.dto';
 import { CreatePinGroupResourceDto } from './dto/create-pin-group-resource.dto';
 import { SharePinGroupResourceDto } from './dto/share-pin-group-resource.dto';
+import { ResourceDto } from './dto/resource.dto';
 
 @Controller('resources')
 export class ResourcesController {
@@ -31,15 +32,6 @@ export class ResourcesController {
     @Query() paginationQuery: PaginationQueryDto,
   ) {
     return this.resourcesService.findPaginated(collectionId, paginationQuery);
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Post('create/:collectionId')
-  async createResource(
-    @Param('collectionId', new ParseUUIDPipe()) collectionId: string,
-    @Body() createResourceDto: CreateResourceDto,
-  ) {
-    return this.resourcesService.create(collectionId, createResourceDto);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -55,18 +47,6 @@ export class ResourcesController {
   }
 
   @UseGuards(JwtAuthGuard)
-  @Post('share/pin/:collectionId')
-  async sharePinResource(
-    @Param('collectionId', new ParseUUIDPipe()) collectionId: string,
-    @Body() sharePinResourceDto: SharePinResourceDto,
-  ) {
-    return this.resourcesService.sharePinResource(
-      collectionId,
-      sharePinResourceDto,
-    );
-  }
-
-  @UseGuards(JwtAuthGuard)
   @Post('create/pin-group/:collectionId')
   async createPinGroupResource(
     @Param('collectionId', new ParseUUIDPipe()) collectionId: string,
@@ -75,6 +55,18 @@ export class ResourcesController {
     return this.resourcesService.createPinGroupResource(
       collectionId,
       createPinGroupResourceDto,
+    );
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('share/pin/:collectionId')
+  async sharePinResource(
+    @Param('collectionId', new ParseUUIDPipe()) collectionId: string,
+    @Body() sharePinResourceDto: SharePinResourceDto,
+  ) {
+    return this.resourcesService.sharePinResource(
+      collectionId,
+      sharePinResourceDto,
     );
   }
 
@@ -108,18 +100,19 @@ export class ResourcesController {
   }
 
   @UseGuards(JwtAuthGuard)
-  @Patch('reorder/:resourceId')
-  async reorderResource(
-    @Param('resourceId', new ParseUUIDPipe()) resourceId: string,
+  @Throttle({ default: { limit: 10, ttl: 1000 } })
+  @Patch('reorder/:entityId')
+  async reorder(
+    @Param('entityId', new ParseUUIDPipe()) entityId: string,
     @Body() reorderDto: ReorderDto,
   ) {
-    return this.resourcesService.reorder(resourceId, reorderDto);
+    return this.resourcesService.reorder(entityId, reorderDto);
   }
 
   @Get('one/:resourceId')
   async getOneResource(
     @Param('resourceId', new ParseUUIDPipe()) resourceId: string,
-  ) {
+  ): Promise<ResourceDto> {
     return this.resourcesService.findOne(resourceId);
   }
 }

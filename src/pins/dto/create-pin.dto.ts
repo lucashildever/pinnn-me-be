@@ -17,13 +17,5 @@ export class CreatePinDto {
 
   @IsOptional()
   @IsString()
-  sharedPinId?: string;
-
-  @IsOptional()
-  @IsString()
-  sourceMuralId?: string;
-
-  @IsOptional()
-  @IsString()
   order?: string;
 }

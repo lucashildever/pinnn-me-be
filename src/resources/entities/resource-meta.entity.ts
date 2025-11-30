@@ -1,4 +1,11 @@
-import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Entity,
+  Column,
+  OneToOne,
+  JoinColumn,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
+import { ResourceEntity } from './resource.entity';
 
 @Entity('resource_meta')
 export class ResourceMetaEntity {
@@ -14,6 +21,12 @@ export class ResourceMetaEntity {
   @Column({ type: 'varchar', nullable: true })
   groupName: string | null;
 
-  @Column('json', { nullable: true })
-  history: { sharedMuralId: string; order: number }[];
+  @Column('json', { nullable: false })
+  history: { sourceMuralId: string; order: number }[] = [];
+
+  @OneToOne(() => ResourceEntity, (resource) => resource.resourceMeta, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'resource_id' })
+  resource: ResourceEntity;
 }

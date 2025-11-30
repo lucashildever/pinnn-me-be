@@ -23,8 +23,9 @@ export class ResourceEntity extends TimestampEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @OneToOne(() => ResourceMetaEntity, { cascade: true })
-  @JoinColumn({ name: 'resource_meta_id' })
+  @OneToOne(() => ResourceMetaEntity, (resourceMeta) => resourceMeta.resource, {
+    cascade: true,
+  })
   resourceMeta: ResourceMetaEntity;
 
   @Column({ type: 'uuid' })

@@ -6,8 +6,9 @@ import {
   ArrayMaxSize,
   ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, plainToInstance } from 'class-transformer';
 import { CreatePinDto } from 'src/pins/dto/create-pin.dto';
+import { SharePinDto } from 'src/pins/dto/share-pin.dto';
 
 export class SharePinGroupResourceDto {
   @IsUUID()
@@ -22,6 +23,14 @@ export class SharePinGroupResourceDto {
     message: 'You can add at most 5 additional pins when sharing a pin group',
   })
   @ValidateNested({ each: true })
-  @Type(() => CreatePinDto)
-  additionalPins?: CreatePinDto[];
+  @Transform(({ value }) => {
+    if (!Array.isArray(value)) return value;
+    return value.map((item) => {
+      if (item.sharedPinId) {
+        return plainToInstance(SharePinDto, item);
+      }
+      return plainToInstance(CreatePinDto, item);
+    });
+  })
+  additionalPins?: (CreatePinDto | SharePinDto)[];
 }
