@@ -1,10 +1,12 @@
 import {
   IsEnum,
+  IsUUID,
   Matches,
   IsString,
   MaxLength,
   MinLength,
   IsNotEmpty,
+  IsOptional,
 } from 'class-validator';
 
 export class ReorderDto {
@@ -21,4 +23,12 @@ export class ReorderDto {
   @MinLength(1)
   @MaxLength(10)
   newOrder: string;
+
+  @IsUUID()
+  @IsOptional()
+  previousId?: string;
+
+  @IsUUID()
+  @IsOptional()
+  nextId?: string;
 }

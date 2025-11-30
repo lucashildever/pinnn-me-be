@@ -121,4 +121,37 @@ export class FractionalIndexingService {
 
     return true;
   }
+
+  /**
+   * Validates that a single order string is a valid fractional index
+   * @param order The order string to validate
+   * @returns true if the order is valid, false otherwise
+   */
+  validateOrder(order: string | undefined | null): boolean {
+    // Order must be defined and not empty
+    if (order == null || order === '') return false;
+
+    // Order must contain only valid base-62 characters
+    for (let i = 0; i < order.length; i++) {
+      if (!this.BASE_62_DIGITS.includes(order[i])) {
+        return false;
+      }
+    }
+
+    // Order length should be reasonable (typically 1-10 characters)
+    if (order.length > 10) return false;
+
+    return true;
+  }
+
+  /**
+   * Compares two order strings lexicographically
+   * @param a First order string
+   * @param b Second order string
+   * @returns -1 if a < b, 0 if a === b, 1 if a > b
+   */
+  compareOrder(a: string, b: string): number {
+    if (a === b) return 0;
+    return a < b ? -1 : 1;
+  }
 }
