@@ -13,7 +13,7 @@ import {
 import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth-guard';
 import { ResourcesService } from './resources.service';
-import { PaginationQueryDto } from 'src/pins/dto/pagination/pagination-query.dto';
+import { PaginationQueryDto } from 'src/common/dto/pagination/pagination-query.dto';
 import { UpdatePinDto } from 'src/pins/dto/update-pin.dto';
 import { ReorderDto } from 'src/pins/dto/reorder.dto';
 import { CreatePinResourceDto } from './dto/create-pin-resource.dto';
@@ -21,17 +21,25 @@ import { SharePinResourceDto } from './dto/share-pin-resource.dto';
 import { CreatePinGroupResourceDto } from './dto/create-pin-group-resource.dto';
 import { SharePinGroupResourceDto } from './dto/share-pin-group-resource.dto';
 import { ResourceDto } from './dto/resource.dto';
+import { PaginatedResourcesResponseDto } from './dto/paginated-resources-response.dto';
 
 @Controller('resources')
 export class ResourcesController {
   constructor(private readonly resourcesService: ResourcesService) {}
 
-  @Get('paginated/:collectionId')
-  async getPaginatedResources(
+  @Get('collection/:collectionId')
+  async getResources(
     @Param('collectionId', new ParseUUIDPipe()) collectionId: string,
     @Query() paginationQuery: PaginationQueryDto,
-  ) {
-    return this.resourcesService.findPaginated(collectionId, paginationQuery);
+  ): Promise<PaginatedResourcesResponseDto> {
+    return this.resourcesService.findResources(collectionId, paginationQuery);
+  }
+
+  @Get(':resourceId')
+  async getResource(
+    @Param('resourceId', new ParseUUIDPipe()) resourceId: string,
+  ): Promise<ResourceDto> {
+    return this.resourcesService.findResource(resourceId);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -83,7 +91,7 @@ export class ResourcesController {
   }
 
   @UseGuards(JwtAuthGuard)
-  @Delete('delete/:resourceId')
+  @Delete(':resourceId')
   async deleteResource(
     @Param('resourceId', new ParseUUIDPipe()) resourceId: string,
   ) {
@@ -107,12 +115,5 @@ export class ResourcesController {
     @Body() reorderDto: ReorderDto,
   ) {
     return this.resourcesService.reorder(entityId, reorderDto);
-  }
-
-  @Get('one/:resourceId')
-  async getOneResource(
-    @Param('resourceId', new ParseUUIDPipe()) resourceId: string,
-  ): Promise<ResourceDto> {
-    return this.resourcesService.findOne(resourceId);
   }
 }

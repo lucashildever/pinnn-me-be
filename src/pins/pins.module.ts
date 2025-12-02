@@ -11,6 +11,8 @@ import { PinsService } from './pins.service';
 import { VariantEntity } from './entities/variant.entity';
 import { PinEntity } from './entities/pin.entity';
 
+import { PinsController } from './pins.controller';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([PinEntity, VariantEntity]),
@@ -20,7 +22,7 @@ import { PinEntity } from './entities/pin.entity';
     CacheModule,
   ],
   providers: [PinsService],
-  controllers: [],
+  controllers: [PinsController],
   exports: [PinsService, TypeOrmModule],
 })
 export class PinsModule {}

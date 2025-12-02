@@ -9,7 +9,7 @@ import { PinEntity } from './entities/pin.entity';
 import { CacheService } from 'src/cache/cache.service';
 import { PinsService } from './pins.service';
 
-import { PaginationQueryDto } from './dto/pagination/pagination-query.dto';
+import { PaginationQueryDto } from '../common/dto/pagination/pagination-query.dto';
 
 import { Status } from '../common/constants/statuses.constant';
 

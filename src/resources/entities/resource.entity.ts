@@ -54,7 +54,6 @@ export class ResourceEntity extends TimestampEntity {
 
   @OneToMany(() => PinEntity, (pin) => pin.resource, {
     cascade: ['insert', 'update'],
-    eager: true,
   })
   pins: PinEntity[];
 

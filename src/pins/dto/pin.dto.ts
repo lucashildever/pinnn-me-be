@@ -13,6 +13,8 @@ import {
 import { VariantDto } from './variant/variant.dto';
 import { Type } from 'class-transformer';
 
+import { PinMetaDto } from './pin-meta.dto';
+
 export class PinDto {
   @IsUUID()
   @IsNotEmpty()
@@ -27,6 +29,9 @@ export class PinDto {
   @MinLength(1)
   @MaxLength(10)
   order?: string;
+
+  @IsOptional()
+  meta?: PinMetaDto;
 
   @IsArray()
   @IsNotEmpty()

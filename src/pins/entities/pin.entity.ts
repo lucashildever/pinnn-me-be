@@ -31,7 +31,6 @@ export class PinEntity extends TimestampEntity {
 
   @OneToMany(() => VariantEntity, (variant) => variant.pin, {
     cascade: true,
-    eager: true,
   })
   variants: VariantEntity[];
 

@@ -1,4 +1,7 @@
-import { PaginatedResponseDto } from 'src/common/dto/paginated-response.dto';
+import { PaginationMetaDto } from 'src/common/dto/pagination/pagination-meta.dto';
 import { ResourceDto } from './resource.dto';
 
-export class PaginatedResourcesResponseDto extends PaginatedResponseDto<ResourceDto> {}
+export class PaginatedResourcesResponseDto {
+  resources: ResourceDto[];
+  pagination: PaginationMetaDto;
+}

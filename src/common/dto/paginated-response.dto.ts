@@ -1,4 +1,4 @@
-import { PaginationMetaDto } from 'src/pins/dto/pagination/pagination-meta.dto';
+import { PaginationMetaDto } from 'src/common/dto/pagination/pagination-meta.dto';
 
 export class PaginatedResponseDto<T> {
   data: T[];

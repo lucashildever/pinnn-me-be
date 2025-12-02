@@ -6,7 +6,7 @@ import { ResourceMetaEntity } from './entities/resource-meta.entity';
 import { PinsService } from 'src/pins/pins.service';
 import { CollectionEntity } from 'src/collections/entities/collection.entity';
 import { FractionalIndexingService } from 'src/common/services/fractional-indexing.service';
-import { PaginationQueryDto } from 'src/pins/dto/pagination/pagination-query.dto';
+import { PaginationQueryDto } from 'src/common/dto/pagination/pagination-query.dto';
 import { PaginatedResourcesResponseDto } from './dto/paginated-resources-response.dto';
 import { UpdatePinDto } from 'src/pins/dto/update-pin.dto';
 import { ReorderDto } from 'src/pins/dto/reorder.dto';
@@ -32,17 +32,16 @@ export class ResourcesService {
     private readonly dataSource: DataSource,
   ) {}
 
-  async findPaginated(
+  async findResources(
     collectionId: string,
     paginationQueryDto: PaginationQueryDto,
   ): Promise<PaginatedResourcesResponseDto> {
-    const { page = 1, limit = 10 } = paginationQueryDto;
+    const { page = 1, limit = 5 } = paginationQueryDto;
     const skip = (page - 1) * limit;
 
     const queryBuilder = this.resourcesRepository
       .createQueryBuilder('resource')
-      .leftJoinAndSelect('resource.pins', 'pin')
-      .leftJoinAndSelect('pin.variants', 'variants')
+      .leftJoinAndSelect('resource.resourceMeta', 'resourceMeta')
       .where('resource.collectionId = :collectionId', { collectionId })
       .andWhere('resource.status = :status', { status: 'active' })
       .orderBy('resource.order', 'ASC')
@@ -51,22 +50,60 @@ export class ResourcesService {
 
     const [resources, total] = await queryBuilder.getManyAndCount();
 
+    const resourceIds = resources.map((r) => r.id);
+    const pinsByResource =
+      await this.pinsService.findBatchPreviews(resourceIds);
+
     const transformedResources = resources.map((resource) => ({
       id: resource.id,
       order: resource.order,
-      pins:
-        resource.pins && resource.pins.length > 0
-          ? resource.pins.map((pin) => this.mapPinToDto(pin))
-          : [],
+      pins: pinsByResource.get(resource.id) || [],
+      meta: resource.resourceMeta
+        ? {
+            sharedResourceId: resource.resourceMeta.sharedResourceId,
+            firstResourceId: resource.resourceMeta.firstResourceId,
+            groupName: resource.resourceMeta.groupName,
+            history: resource.resourceMeta.history,
+          }
+        : undefined,
     }));
 
     return {
-      data: transformedResources,
+      resources: transformedResources,
       pagination: {
         currentPage: page,
         totalItems: total,
         itemsPerPage: limit,
       },
+    };
+  }
+
+  async findResource(resourceId: string): Promise<ResourceDto> {
+    const resource = await this.resourcesRepository
+      .createQueryBuilder('resource')
+      .leftJoinAndSelect('resource.resourceMeta', 'resourceMeta')
+      .where('resource.id = :resourceId', { resourceId })
+      .andWhere('resource.status = :status', { status: 'active' })
+      .getOne();
+
+    if (!resource) throw new NotFoundException('Resource not found');
+
+    const pinsByResource = await this.pinsService.findBatchPreviews([
+      resource.id,
+    ]);
+
+    return {
+      id: resource.id,
+      order: resource.order,
+      pins: pinsByResource.get(resource.id) || [],
+      meta: resource.resourceMeta
+        ? {
+            sharedResourceId: resource.resourceMeta.sharedResourceId,
+            firstResourceId: resource.resourceMeta.firstResourceId,
+            groupName: resource.resourceMeta.groupName,
+            history: resource.resourceMeta.history,
+          }
+        : undefined,
     };
   }
 
@@ -614,54 +651,6 @@ export class ResourcesService {
     });
   }
 
-  private generateHistory(
-    currentHistory: { sourceMuralId: string; order: number }[],
-    sourceMuralId: string,
-  ): { sourceMuralId: string; order: number }[] {
-    const maxOrder = currentHistory.reduce(
-      (max, item) => (item.order > max ? item.order : max),
-      0,
-    );
-
-    const newHistoryItem = {
-      sourceMuralId: sourceMuralId,
-      order: maxOrder + 1,
-    };
-
-    let newHistory = [...currentHistory, newHistoryItem];
-
-    if (newHistory.length > 5) {
-      const minOrder = newHistory.reduce(
-        (min, item) => (item.order < min ? item.order : min),
-        Infinity,
-      );
-      newHistory = newHistory.filter((item) => item.order !== minOrder);
-    }
-
-    return newHistory;
-  }
-
-  private mapPinToDto(pin: PinEntity) {
-    return {
-      id: pin.id,
-      order: pin.order,
-      variants: pin.variants.map((variant) => ({
-        id: variant.id,
-        order: variant.order,
-        config: variant.config,
-      })),
-    };
-  }
-
-  private isSharePinDto(pin: any): pin is {
-    sharedPinId: string;
-    sourceMuralId: string;
-    additionalVariants?: any[];
-    order?: string;
-  } {
-    return 'sharedPinId' in pin && pin.sharedPinId !== undefined;
-  }
-
   async softDelete(resourceId: string) {
     const resource = await this.resourcesRepository.findOne({
       where: { id: resourceId },
@@ -685,18 +674,6 @@ export class ResourcesService {
       throw new NotFoundException('Pin Resource not found');
     }
 
-    // Assuming we are updating the first pin for now, or we need to know which pin to update.
-    // The UpdatePinDto usually targets a specific pin ID, but here we are updating via resourceId.
-    // If resource has multiple pins, this endpoint is ambiguous.
-    // However, for now, let's assume single pin update or the user will provide pinId in the future.
-    // But wait, the previous logic was resource.pin.id.
-    // If we have multiple pins, which one?
-    // Let's assume the first one for backward compatibility or throw error if multiple?
-    // The user said "resource contém pins".
-    // If I update a resource, do I update all pins? No.
-    // The endpoint is `updatePinResource(resourceId, dto)`.
-    // It seems it was designed for 1-to-1.
-    // I will use the first pin for now and add a TODO.
     const pinToUpdate = resource.pins[0];
     return await this.pinsService.update(pinToUpdate.id, updatePinDto);
   }
@@ -971,21 +948,51 @@ export class ResourcesService {
     });
   }
 
-  async findOne(resourceId: string): Promise<ResourceDto> {
-    const resource = await this.resourcesRepository
-      .createQueryBuilder('resource')
-      .leftJoinAndSelect('resource.pins', 'pin')
-      .leftJoinAndSelect('pin.variants', 'variants')
-      .where('resource.id = :resourceId', { resourceId })
-      .andWhere('resource.status = :status', { status: 'active' })
-      .getOne();
+  private generateHistory(
+    currentHistory: { sourceMuralId: string; order: number }[],
+    sourceMuralId: string,
+  ): { sourceMuralId: string; order: number }[] {
+    const maxOrder = currentHistory.reduce(
+      (max, item) => (item.order > max ? item.order : max),
+      0,
+    );
 
-    if (!resource) throw new NotFoundException('Resource not found');
-
-    return {
-      id: resource.id,
-      order: resource.order,
-      pins: resource.pins?.map((pin) => this.mapPinToDto(pin)) || [],
+    const newHistoryItem = {
+      sourceMuralId: sourceMuralId,
+      order: maxOrder + 1,
     };
+
+    let newHistory = [...currentHistory, newHistoryItem];
+
+    if (newHistory.length > 5) {
+      const minOrder = newHistory.reduce(
+        (min, item) => (item.order < min ? item.order : min),
+        Infinity,
+      );
+      newHistory = newHistory.filter((item) => item.order !== minOrder);
+    }
+
+    return newHistory;
+  }
+
+  private mapPinToDto(pin: PinEntity) {
+    return {
+      id: pin.id,
+      order: pin.order,
+      variants: pin.variants.map((variant) => ({
+        id: variant.id,
+        order: variant.order,
+        config: variant.config,
+      })),
+    };
+  }
+
+  private isSharePinDto(pin: any): pin is {
+    sharedPinId: string;
+    sourceMuralId: string;
+    additionalVariants?: any[];
+    order?: string;
+  } {
+    return 'sharedPinId' in pin && pin.sharedPinId !== undefined;
   }
 }

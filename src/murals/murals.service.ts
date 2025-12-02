@@ -109,7 +109,7 @@ export class MuralsService {
     if (getMainCollectionResources) {
       const mainCollection = await this.collectionsService.findMain(mural.id);
       response.mainCollectionResources =
-        await this.resourcesService.findPaginated(mainCollection.id, {
+        await this.resourcesService.findResources(mainCollection.id, {
           page: 1,
           limit: 5,
         });
