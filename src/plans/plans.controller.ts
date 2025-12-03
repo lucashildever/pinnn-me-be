@@ -52,7 +52,7 @@ export class PlansController {
     description: 'Forbidden - Admin access required',
   })
   async getAllPlans(): Promise<PlanResponseDto[]> {
-    return await this.plansService.findAllPlans();
+    return await this.plansService.findAll();
   }
 
   @Get(':id')
@@ -72,7 +72,7 @@ export class PlansController {
   })
   @ApiResponse({ status: 404, description: 'Plan not found' })
   async getPlanById(@Param('id') id: string): Promise<PlanResponseDto> {
-    return await this.plansService.findByIdOrFail(id, false);
+    return await this.plansService.findById(id);
   }
 
   @Get('name/:name')
@@ -92,7 +92,7 @@ export class PlansController {
   })
   @ApiResponse({ status: 404, description: 'Plan not found' })
   async getPlanByName(@Param('name') name: string): Promise<PlanResponseDto> {
-    return await this.plansService.findPlanByName(name, false);
+    return await this.plansService.findByName(name, false);
   }
 }
 
@@ -109,7 +109,7 @@ export class PublicPlanController {
     type: [PlanResponseDto],
   })
   async getPublicPlans(): Promise<PlanResponseDto[]> {
-    return await this.plansService.findAllPlans();
+    return await this.plansService.findAll();
   }
 
   @Get('slug/:slug')
@@ -124,6 +124,6 @@ export class PublicPlanController {
   async getPublicPlanByName(
     @Param('name') name: string,
   ): Promise<PlanResponseDto> {
-    return await this.plansService.findPlanByName(name, true);
+    return await this.plansService.findByName(name, true);
   }
 }

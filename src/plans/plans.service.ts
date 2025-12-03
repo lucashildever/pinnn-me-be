@@ -54,19 +54,14 @@ export class PlansService {
     return this.mapPlanToResponse(savedPlan);
   }
 
-  async findAllPlans(): Promise<PlanResponseDto[]> {
+  async findAll(): Promise<PlanResponseDto[]> {
     const plans = await this.plansRepository.find();
     return plans.map((p) => this.mapPlanToResponse(p));
   }
 
-  async findByIdOrFail(id: string, active: boolean): Promise<PlanResponseDto> {
-    const where: any = { id };
-    if (active) {
-      where.status = 'active';
-    }
-
+  async findById(id: string): Promise<PlanResponseDto> {
     const plan = await this.plansRepository.findOne({
-      where,
+      where: { id },
       relations: ['prices'],
     });
 
@@ -77,10 +72,7 @@ export class PlansService {
     return this.mapPlanToResponse(plan);
   }
 
-  async findPlanByName(
-    name: string,
-    active: boolean,
-  ): Promise<PlanResponseDto> {
+  async findByName(name: string, active: boolean): Promise<PlanResponseDto> {
     const where: any = { name };
 
     if (active) {

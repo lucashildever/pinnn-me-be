@@ -4,14 +4,10 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-
 import { Subscription } from './entities/subscription.entity';
-
-import { CreateSubscriptionDto } from './dto/create-subscription.dto';
-import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
-
 import { PlansService } from 'src/plans/plans.service';
+import { Repository } from 'typeorm';
+import { SubscriptionStatus } from './types/subscription-status.type';
 
 @Injectable()
 export class SubscriptionsService {
@@ -22,21 +18,53 @@ export class SubscriptionsService {
     private readonly plansService: PlansService,
   ) {}
 
-  async subscribe(createDto: CreateSubscriptionDto): Promise<Subscription> {
-    await this.cancelUserActiveSubscriptions(createDto.userId);
+  async handleSubscriptionChange(data: {
+    userId: string;
+    stripeSubscriptionId: string;
+    stripePriceId: string;
+    status: string;
+    currentPeriodEnd: Date;
+  }): Promise<Subscription> {
+    const plan = await this.plansService.findByStripePriceId(
+      data.stripePriceId,
+    );
 
-    const planId = (
-      await this.plansService.findPlanByName(createDto.planName, true)
-    ).id;
-
-    const subscription = this.subscriptionsRepository.create({
-      userId: createDto.userId,
-      planId: planId,
-      status: 'active',
-      startAt: createDto.startAt || new Date(),
-      currentPeriodEnd: createDto.currentPeriodEnd,
-      stripeSubscriptionId: createDto.stripeSubscriptionId,
+    let subscription = await this.subscriptionsRepository.findOne({
+      where: { stripeSubscriptionId: data.stripeSubscriptionId },
     });
+
+    if (!subscription) {
+      // Check if user already has a subscription to avoid duplicates if logic demands,
+      // but for webhook handling, we usually trust the ID.
+      // However, if we want to enforce 1 active sub per user locally:
+      const existing = await this.findUserActiveSubscription(data.userId);
+      if (
+        existing &&
+        existing.stripeSubscriptionId !== data.stripeSubscriptionId
+      ) {
+        // Handle edge case: User switched subs but we didn't get the cancel event yet?
+        // Or just update the existing one?
+        // For MVP, let's assume we create a new one or update the found one.
+        // Let's create new if not found by stripeId.
+        subscription = this.subscriptionsRepository.create({
+          userId: data.userId,
+          stripeSubscriptionId: data.stripeSubscriptionId,
+        });
+      } else if (!existing) {
+        subscription = this.subscriptionsRepository.create({
+          userId: data.userId,
+          stripeSubscriptionId: data.stripeSubscriptionId,
+        });
+      } else {
+        subscription = existing;
+      }
+    }
+
+    subscription.plan = plan;
+    subscription.status = data.status as SubscriptionStatus;
+    subscription.currentPeriodEnd = data.currentPeriodEnd;
+    // Ensure userId is set (if we found by stripeId, it might be set, if new, we set it)
+    if (!subscription.userId) subscription.userId = data.userId;
 
     return this.subscriptionsRepository.save(subscription);
   }
@@ -44,7 +72,7 @@ export class SubscriptionsService {
   async findUserActiveSubscription(
     userId: string,
   ): Promise<Subscription | null> {
-    const activeStatuses = ['active', 'past-due'];
+    const activeStatuses = ['active', 'past-due', 'trialing'];
 
     return this.subscriptionsRepository
       .createQueryBuilder('subscription')
@@ -72,7 +100,6 @@ export class SubscriptionsService {
     const subscription = await this.subscriptionsRepository
       .createQueryBuilder('subscription')
       .leftJoinAndSelect('subscription.plan', 'plan')
-      .leftJoinAndSelect('plan.prices', 'prices')
       .leftJoinAndSelect('subscription.user', 'user')
       .where('subscription.id = :id', { id })
       .getOne();
@@ -90,48 +117,11 @@ export class SubscriptionsService {
     return this.subscriptionsRepository
       .createQueryBuilder('subscription')
       .leftJoinAndSelect('subscription.plan', 'plan')
-      .leftJoinAndSelect('plan.prices', 'prices')
       .leftJoinAndSelect('subscription.user', 'user')
       .where('subscription.billingProviderId = :billingProviderId', {
         billingProviderId,
       })
       .getOne();
-  }
-
-  async updateSubscription(
-    id: string,
-    updateDto: UpdateSubscriptionDto,
-  ): Promise<Subscription> {
-    const subscription = await this.findSubscriptionById(id);
-
-    Object.assign(subscription, updateDto);
-    return this.subscriptionsRepository.save(subscription);
-  }
-
-  async activateSubscription(
-    id: string,
-    periodEnd?: Date,
-  ): Promise<Subscription> {
-    return this.updateSubscription(id, {
-      status: 'active',
-      currentPeriodEnd: periodEnd,
-    });
-  }
-
-  async cancelSubscription(id: string): Promise<Subscription> {
-    return this.updateSubscription(id, {
-      status: 'cancelled',
-    });
-  }
-
-  async reactivateSubscription(id: string): Promise<Subscription> {
-    const newPeriodEnd = new Date();
-    newPeriodEnd.setMonth(newPeriodEnd.getMonth() + 1); // +1 month
-
-    return this.updateSubscription(id, {
-      status: 'active',
-      currentPeriodEnd: newPeriodEnd,
-    });
   }
 
   async hasProAccess(userId: string): Promise<boolean> {
@@ -160,57 +150,17 @@ export class SubscriptionsService {
     }
   }
 
-  async findSubscriptionsExpiringSoon(
-    days: number = 7,
-  ): Promise<Subscription[]> {
-    const futureDate = new Date();
-    futureDate.setDate(futureDate.getDate() + days);
+  async getPlanFeatures(userId: string): Promise<string[]> {
+    const subscription = await this.findUserActiveSubscription(userId);
 
-    return this.subscriptionsRepository
-      .createQueryBuilder('subscription')
-      .leftJoinAndSelect('subscription.plan', 'plan')
-      .leftJoinAndSelect('subscription.user', 'user')
-      .where('subscription.status = :status', {
-        status: 'active',
-      })
-      .andWhere('subscription.currentPeriodEnd <= :futureDate', { futureDate })
-      .andWhere('subscription.currentPeriodEnd > :now', { now: new Date() })
-      .getMany();
+    if (!subscription || !subscription.plan) {
+      const freePlan = await this.plansService.findByName('FREE', true);
+      return freePlan.features;
+    }
+
+    return subscription.plan.features;
   }
 
-  async processExpiredSubscriptions(): Promise<{ processed: number }> {
-    const now = new Date();
-
-    const result = await this.subscriptionsRepository
-      .createQueryBuilder()
-      .update(Subscription)
-      .set({ status: 'expired' })
-      .where('status = :activeStatus', {
-        activeStatus: 'active',
-      })
-      .andWhere('currentPeriodEnd <= :now', { now })
-      .execute();
-
-    return { processed: result.affected || 0 };
-  }
-
-  private async cancelUserActiveSubscriptions(userId: string): Promise<void> {
-    const activeStatuses = ['active', 'past-due'];
-
-    await this.subscriptionsRepository
-      .createQueryBuilder()
-      .update(Subscription)
-      .set({
-        status: 'cancelled',
-      })
-      .where('userId = :userId', { userId })
-      .andWhere('status IN (:...statuses)', { statuses: activeStatuses })
-      .execute();
-  }
-
-  // TODO
-  // atualizar nome para "status"
-  // precisa verificar se há inscrição ativa no stripe, via PaymentsService
   async getSubscriptionStats(userId: string) {
     const subscription = await this.findUserActiveSubscription(userId);
 
@@ -238,18 +188,5 @@ export class SubscriptionsService {
       currentPeriodEnd: subscription.currentPeriodEnd,
       isCancelled: subscription.isCancelled(),
     };
-  }
-
-  async renewSubscription(
-    id: string,
-    periodInMonths: number = 1,
-  ): Promise<Subscription> {
-    const newPeriodEnd = new Date();
-    newPeriodEnd.setMonth(newPeriodEnd.getMonth() + periodInMonths);
-
-    return this.updateSubscription(id, {
-      status: 'active',
-      currentPeriodEnd: newPeriodEnd,
-    });
   }
 }
