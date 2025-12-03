@@ -13,6 +13,7 @@ import { AuthService } from './auth.service';
 import { UserEntity } from 'src/users/entities/user.entity';
 import { RolesGuard } from './guards/roles.guard';
 import { SuperAdminGuard } from './guards/super-admin.guard';
+import { SubscriptionsModule } from 'src/subscriptions/subscriptions.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { SuperAdminGuard } from './guards/super-admin.guard';
     }),
     UsersModule,
     CredentialsModule,
+    SubscriptionsModule,
   ],
   providers: [AuthService, JwtStrategy, RolesGuard, SuperAdminGuard],
   exports: [AuthService, RolesGuard, SuperAdminGuard],

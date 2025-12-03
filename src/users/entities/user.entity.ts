@@ -2,7 +2,7 @@ import {
   Entity,
   Column,
   OneToMany,
-  UpdateDateColumn,
+  DeleteDateColumn,
   PrimaryGeneratedColumn,
 } from 'typeorm';
 
@@ -67,6 +67,6 @@ export class UserEntity extends TimestampEntity {
   })
   status: Status;
 
-  @UpdateDateColumn({ type: 'timestamp' })
+  @DeleteDateColumn({ type: 'timestamp', nullable: true })
   deletedAt: Date;
 }

@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -62,7 +66,6 @@ export class PlansService {
   async findById(id: string): Promise<PlanResponseDto> {
     const plan = await this.plansRepository.findOne({
       where: { id },
-      relations: ['prices'],
     });
 
     if (!plan) {
@@ -72,16 +75,9 @@ export class PlansService {
     return this.mapPlanToResponse(plan);
   }
 
-  async findByName(name: string, active: boolean): Promise<PlanResponseDto> {
-    const where: any = { name };
-
-    if (active) {
-      where.status = 'active';
-    }
-
+  async findByName(name: string): Promise<PlanResponseDto> {
     const plan = await this.plansRepository.findOne({
-      where,
-      relations: ['prices'],
+      where: { name },
     });
 
     if (!plan) {
@@ -102,6 +98,20 @@ export class PlansService {
     if (!plan) {
       throw new Error(
         `Plan not found for this stripePriceId: ${stripePriceId}`,
+      );
+    }
+
+    return plan;
+  }
+
+  async findDefaultPlan(): Promise<Plan> {
+    const plan = await this.plansRepository.findOne({
+      where: { isDefault: true },
+    });
+
+    if (!plan) {
+      throw new NotFoundException(
+        'Default plan not found. Please ensure a default plan (FREE) is configured in the database.',
       );
     }
 

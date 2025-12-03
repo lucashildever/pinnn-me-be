@@ -92,7 +92,7 @@ export class PlansController {
   })
   @ApiResponse({ status: 404, description: 'Plan not found' })
   async getPlanByName(@Param('name') name: string): Promise<PlanResponseDto> {
-    return await this.plansService.findByName(name, false);
+    return await this.plansService.findByName(name);
   }
 }
 
@@ -124,6 +124,6 @@ export class PublicPlanController {
   async getPublicPlanByName(
     @Param('name') name: string,
   ): Promise<PlanResponseDto> {
-    return await this.plansService.findByName(name, true);
+    return await this.plansService.findByName(name);
   }
 }

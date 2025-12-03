@@ -96,35 +96,35 @@ export class WebhooksService {
         break;
       }
       case 'customer.subscription.created': {
-        const stripeSubscription = event.data.object;
-        const customerId = stripeSubscription.customer as string;
+        // const stripeSubscription = event.data.object;
+        // const customerId = stripeSubscription.customer as string;
 
-        const priceId = stripeSubscription.items.data[0].price.id; // pq eu pego o price ID?
-        const plan = await this.plansService.findByStripePriceId(priceId);
+        // const priceId = stripeSubscription.items.data[0].price.id; // pq eu pego o price ID?
+        // const plan = await this.plansService.findByStripePriceId(priceId);
 
-        const billingInfo =
-          await this.billingsService.findBillingInfoByCustomerId(customerId);
+        // const billingInfo =
+        //   await this.billingsService.findBillingInfoByCustomerId(customerId);
 
-        await this.subscriptionsService.subscribe({
-          userId: billingInfo.userId,
-          planName: plan.name,
-          startAt: new Date(
-            (stripeSubscription as any).current_period_start * 1000,
-          ),
-          currentPeriodEnd: new Date(
-            (stripeSubscription as any).current_period_end * 1000,
-          ),
-          stripeSubscriptionId: stripeSubscription.id,
-        });
+        // await this.subscriptionsService.subscribe({
+        //   userId: billingInfo.userId,
+        //   planName: plan.name,
+        //   startAt: new Date(
+        //     (stripeSubscription as any).current_period_start * 1000,
+        //   ),
+        //   currentPeriodEnd: new Date(
+        //     (stripeSubscription as any).current_period_end * 1000,
+        //   ),
+        //   stripeSubscriptionId: stripeSubscription.id,
+        // });
 
         break;
       }
       case 'customer.subscription.deleted': {
         const subscriptionId = (event.data.object as Stripe.Subscription).id;
 
-        await this.subscriptionsService.updateSubscription(subscriptionId, {
-          status: 'cancelled',
-        });
+        // await this.subscriptionsService.updateSubscription(subscriptionId, {
+        //   status: 'cancelled',
+        // });
 
         break;
       }
@@ -448,25 +448,23 @@ export class WebhooksService {
         break;
       }
       case 'invoice.payment_failed': {
-        const stripeInvoice = event.data.object as Stripe.Invoice;
-        const subscriptionId = (stripeInvoice as any).subscription as string;
+        // const stripeInvoice = event.data.object as Stripe.Invoice;
+        // const subscriptionId = (stripeInvoice as any).subscription as string;
 
-        if (subscriptionId) {
-          await this.subscriptionsService.updateSubscription(subscriptionId, {
-            status: 'cancelled',
-          });
-        }
+        // if (subscriptionId) {
+        //   await this.subscriptionsService.cancelSubscription(subscriptionId);
+        // }
 
-        const paymentIntentId = (stripeInvoice as any).payment_intent as string;
+        // const paymentIntentId = (stripeInvoice as any).payment_intent as string;
 
-        if (paymentIntentId) {
-          await this.paymentsService.updatePaymentAttemptByPaymentIntentId(
-            paymentIntentId,
-            {
-              status: 'failed',
-            },
-          );
-        }
+        // if (paymentIntentId) {
+        //   await this.paymentsService.updatePaymentAttemptByPaymentIntentId(
+        //     paymentIntentId,
+        //     {
+        //       status: 'failed',
+        //     },
+        //   );
+        // }
 
         break;
       }

@@ -1,4 +1,9 @@
-import { Logger, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Logger,
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { Repository, DataSource } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ResourceEntity } from './entities/resource.entity';
@@ -19,6 +24,8 @@ import { PinMetaEntity } from 'src/pins/entities/pin-meta.entity';
 import { VariantEntity } from 'src/pins/entities/variant.entity';
 import { ResourceDto } from './dto/resource.dto';
 import { CreateVariantDto } from 'src/pins/dto/variant/create-variant.dto';
+import { SubscriptionsService } from 'src/subscriptions/subscriptions.service';
+import { PlansService } from 'src/plans/plans.service';
 
 @Injectable()
 export class ResourcesService {
@@ -30,6 +37,8 @@ export class ResourcesService {
     private readonly pinsService: PinsService,
     private readonly fractionalIndexingService: FractionalIndexingService,
     private readonly dataSource: DataSource,
+    private readonly subscriptionsService: SubscriptionsService,
+    private readonly plansService: PlansService,
   ) {}
 
   async findResources(
@@ -176,9 +185,39 @@ export class ResourcesService {
     return await this.dataSource.transaction(async (manager) => {
       const collection = await manager.findOne(CollectionEntity, {
         where: { id: collectionId },
+        relations: ['mural'],
       });
 
       if (!collection) throw new NotFoundException('Collection not found');
+
+      let maxPinsPerGroup: number;
+      const subscription =
+        await this.subscriptionsService.findUserActiveSubscription(
+          collection.mural.userId,
+        );
+
+      if (subscription?.plan) {
+        if (typeof subscription.plan.limits?.pins_per_group !== 'number') {
+          throw new NotFoundException(
+            `Plan configuration error: ${subscription.plan.name} is missing pins_per_group limit`,
+          );
+        }
+        maxPinsPerGroup = subscription.plan.limits.pins_per_group;
+      } else {
+        const freePlan = await this.plansService.findByName('free');
+        if (typeof freePlan.limits?.pins_per_group !== 'number') {
+          throw new NotFoundException(
+            'Plan configuration error: free plan is missing pins_per_group limit',
+          );
+        }
+        maxPinsPerGroup = freePlan.limits.pins_per_group;
+      }
+
+      if (createPinGroupResourceDto.pins.length > maxPinsPerGroup) {
+        throw new BadRequestException(
+          `Pin group cannot have more than ${maxPinsPerGroup} pins in the current plan.`,
+        );
+      }
 
       const pinOrders = createPinGroupResourceDto.pins.map((pin) => pin.order);
 

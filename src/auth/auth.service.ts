@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 
 import { CredentialsService } from 'src/credentials/credentials.service';
 import { UsersService } from 'src/users/users.service';
+import { SubscriptionsService } from 'src/subscriptions/subscriptions.service';
 
 import { AuthCredentialsDto } from './dto/auth-credentials.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
@@ -13,6 +14,7 @@ export class AuthService {
     private jwtService: JwtService,
     private readonly usersService: UsersService,
     private readonly credentialsService: CredentialsService,
+    private readonly subscriptionsService: SubscriptionsService,
   ) {}
 
   async register({
@@ -26,6 +28,8 @@ export class AuthService {
       username: email.split('@')[0],
       password: await this.credentialsService.hashPassword(password),
     });
+
+    await this.subscriptionsService.subscribeToDefault(user.id);
 
     const tokenPayload = { sub: user.id, email: user.email };
 

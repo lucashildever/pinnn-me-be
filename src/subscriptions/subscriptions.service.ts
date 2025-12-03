@@ -69,6 +69,33 @@ export class SubscriptionsService {
     return this.subscriptionsRepository.save(subscription);
   }
 
+  /**
+   * Subscribe a new user to the default (FREE) plan.
+   * This should be called during user registration/account creation.
+   */
+  async subscribeToDefault(userId: string): Promise<Subscription> {
+    const existingSubscription = await this.findUserActiveSubscription(userId);
+
+    if (existingSubscription) {
+      throw new BadRequestException('User already has an active subscription');
+    }
+
+    const defaultPlan = await this.plansService.findDefaultPlan();
+
+    const farFuture = new Date();
+    farFuture.setFullYear(farFuture.getFullYear() + 100);
+
+    const subscription = this.subscriptionsRepository.create({
+      userId,
+      planId: defaultPlan.id,
+      status: 'active',
+      startAt: new Date(),
+      currentPeriodEnd: farFuture,
+    });
+
+    return this.subscriptionsRepository.save(subscription);
+  }
+
   async findUserActiveSubscription(
     userId: string,
   ): Promise<Subscription | null> {
@@ -154,7 +181,7 @@ export class SubscriptionsService {
     const subscription = await this.findUserActiveSubscription(userId);
 
     if (!subscription || !subscription.plan) {
-      const freePlan = await this.plansService.findByName('FREE', true);
+      const freePlan = await this.plansService.findByName('FREE');
       return freePlan.features;
     }
 
