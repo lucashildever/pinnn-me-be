@@ -18,8 +18,8 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "db:seed": "ts-node -r tsconfig-paths/register src/database/commands/seed-cli.ts seed",
-    "db:clear-and-seed": "ts-node -r tsconfig-paths/register src/database/commands/seed-cli.ts seed --clear-and-seed"
+    "seed": "ts-node -r tsconfig-paths/register src/database/commands/seed-cli.ts seed",
+    "seed:fresh": "ts-node -r tsconfig-paths/register src/database/commands/seed-cli.ts seed --clear-and-seed"
   },
   "dependencies": {
     "@nestjs/cache-manager": "^3.0.1",

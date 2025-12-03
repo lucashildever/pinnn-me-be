@@ -1,40 +1,35 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
 import { UserEntity } from 'src/users/entities/user.entity';
-import { MuralEntity } from 'src/murals/entities/mural.entity';
-import { CollectionEntity } from 'src/collections/entities/collection.entity';
-import { PinEntity } from 'src/pins/entities/pin.entity';
+import { Plan } from 'src/plans/entities/plan.entity';
+import { CredentialsService } from 'src/credentials/credentials.service';
+import { seedPlans } from './seeds/plans.seed';
 import { seedUsers } from './seeds/users.seed';
-import { seedMurals } from './seeds/murals.seed';
-import { seedCollections } from './seeds/collections.seed';
-import { seedPins } from './seeds/pins.seed';
 
 @Injectable()
 export class DatabaseService {
   constructor(
     @InjectRepository(UserEntity)
     private readonly usersRepository: Repository<UserEntity>,
-    @InjectRepository(MuralEntity)
-    private readonly muralsRepository: Repository<MuralEntity>,
-    @InjectRepository(CollectionEntity)
-    private readonly collectionsRepository: Repository<CollectionEntity>,
-    @InjectRepository(PinEntity)
-    private readonly pinsRepository: Repository<PinEntity>,
+    @InjectRepository(Plan)
+    private readonly plansRepository: Repository<Plan>,
+    private readonly configService: ConfigService,
+    private readonly credentialsService: CredentialsService,
   ) {}
 
   private async clearAllTables() {
     try {
-      // deactivate foreign key check
+      // Deactivate foreign key check
       await this.usersRepository.query('SET FOREIGN_KEY_CHECKS = 0');
 
-      // keep this order
-      await this.pinsRepository.query('TRUNCATE TABLE pins');
-      await this.collectionsRepository.query('TRUNCATE TABLE collections');
-      await this.muralsRepository.query('TRUNCATE TABLE murals');
+      // Clear tables (order matters due to foreign keys)
+      await this.usersRepository.query('TRUNCATE TABLE subscriptions');
       await this.usersRepository.query('TRUNCATE TABLE users');
+      await this.plansRepository.query('TRUNCATE TABLE plans');
 
-      // activate foreign key check
+      // Activate foreign key check
       await this.usersRepository.query('SET FOREIGN_KEY_CHECKS = 1');
 
       console.log('All tables cleared successfully');
@@ -46,11 +41,13 @@ export class DatabaseService {
 
   async seed() {
     try {
-      // keep this order
-      // await seedUsers(this.userRepository);
-      // await seedMurals(this.muralRepository, this.userRepository);
-      // await seedCollections(this.collectionRepository, this.muralRepository);
-      // await seedPins(this.pinRepository, this.collectionRepository);
+      console.log('Starting seed process...');
+
+      // Seed plans first (users depend on plans via subscriptions)
+      await seedPlans(this.plansRepository, this.configService);
+
+      // Seed users
+      await seedUsers(this.usersRepository, this.credentialsService);
 
       console.log('Seed completed successfully');
     } catch (error) {

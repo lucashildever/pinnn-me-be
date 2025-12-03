@@ -1,20 +1,17 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ConfigModule } from '@nestjs/config';
 import { DatabaseService } from './database.service';
 import { UserEntity } from 'src/users/entities/user.entity';
-import { MuralEntity } from 'src/murals/entities/mural.entity';
-import { CollectionEntity } from 'src/collections/entities/collection.entity';
-import { PinEntity } from 'src/pins/entities/pin.entity';
+import { Plan } from 'src/plans/entities/plan.entity';
 import { SeedCommand } from './commands/seed.command';
+import { CredentialsModule } from 'src/credentials/credentials.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([
-      UserEntity,
-      MuralEntity,
-      CollectionEntity,
-      PinEntity,
-    ]),
+    TypeOrmModule.forFeature([UserEntity, Plan]),
+    ConfigModule,
+    CredentialsModule,
   ],
   providers: [DatabaseService, SeedCommand],
   exports: [DatabaseService],
