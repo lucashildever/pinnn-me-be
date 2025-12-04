@@ -7,6 +7,8 @@ import { Plan } from 'src/plans/entities/plan.entity';
 import { CredentialsService } from 'src/credentials/credentials.service';
 import { seedPlans } from './seeds/plans.seed';
 import { seedUsers } from './seeds/users.seed';
+import { seedSubscriptions } from './seeds/subscriptions.seed';
+import { Subscription } from 'src/subscriptions/entities/subscription.entity';
 
 @Injectable()
 export class DatabaseService {
@@ -15,6 +17,8 @@ export class DatabaseService {
     private readonly usersRepository: Repository<UserEntity>,
     @InjectRepository(Plan)
     private readonly plansRepository: Repository<Plan>,
+    @InjectRepository(Subscription)
+    private readonly subscriptionsRepository: Repository<Subscription>,
     private readonly configService: ConfigService,
     private readonly credentialsService: CredentialsService,
   ) {}
@@ -25,6 +29,14 @@ export class DatabaseService {
       await this.usersRepository.query('SET FOREIGN_KEY_CHECKS = 0');
 
       // Clear tables (order matters due to foreign keys)
+      // Start with most dependent tables first
+      await this.usersRepository.query('TRUNCATE TABLE variants');
+      await this.usersRepository.query('TRUNCATE TABLE pins');
+      await this.usersRepository.query('TRUNCATE TABLE pin_meta');
+      await this.usersRepository.query('TRUNCATE TABLE resources');
+      await this.usersRepository.query('TRUNCATE TABLE resource_meta');
+      await this.usersRepository.query('TRUNCATE TABLE collections');
+      await this.usersRepository.query('TRUNCATE TABLE murals');
       await this.usersRepository.query('TRUNCATE TABLE subscriptions');
       await this.usersRepository.query('TRUNCATE TABLE users');
       await this.plansRepository.query('TRUNCATE TABLE plans');
@@ -48,6 +60,13 @@ export class DatabaseService {
 
       // Seed users
       await seedUsers(this.usersRepository, this.credentialsService);
+
+      // Seed subscriptions
+      await seedSubscriptions(
+        this.subscriptionsRepository,
+        this.usersRepository,
+        this.plansRepository,
+      );
 
       console.log('Seed completed successfully');
     } catch (error) {

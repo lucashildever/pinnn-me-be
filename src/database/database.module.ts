@@ -4,12 +4,13 @@ import { ConfigModule } from '@nestjs/config';
 import { DatabaseService } from './database.service';
 import { UserEntity } from 'src/users/entities/user.entity';
 import { Plan } from 'src/plans/entities/plan.entity';
+import { Subscription } from 'src/subscriptions/entities/subscription.entity';
 import { SeedCommand } from './commands/seed.command';
 import { CredentialsModule } from 'src/credentials/credentials.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([UserEntity, Plan]),
+    TypeOrmModule.forFeature([UserEntity, Plan, Subscription]),
     ConfigModule,
     CredentialsModule,
   ],
