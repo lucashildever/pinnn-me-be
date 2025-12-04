@@ -2,7 +2,7 @@ import {
   Logger,
   Injectable,
   NotFoundException,
-  BadRequestException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { Repository, DataSource } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -123,6 +123,7 @@ export class ResourcesService {
     return await this.dataSource.transaction(async (manager) => {
       const collection = await manager.findOne(CollectionEntity, {
         where: { id: collectionId },
+        relations: ['mural'],
       });
 
       if (!collection) throw new NotFoundException('Collection not found');
@@ -135,6 +136,12 @@ export class ResourcesService {
           'Variants have invalid order sequence. Variants must be in correct ascending order.',
         );
       }
+
+      await this.subscriptionsService.validateSubscriptionLimits(
+        collection.mural.userId,
+        'variants_per_pin',
+        createPinResourceDto.variants.length,
+      );
 
       const lastResource = await manager
         .createQueryBuilder(ResourceEntity, 'resource')
@@ -190,34 +197,11 @@ export class ResourcesService {
 
       if (!collection) throw new NotFoundException('Collection not found');
 
-      let maxPinsPerGroup: number;
-      const subscription =
-        await this.subscriptionsService.findUserActiveSubscription(
-          collection.mural.userId,
-        );
-
-      if (subscription?.plan) {
-        if (typeof subscription.plan.limits?.pins_per_group !== 'number') {
-          throw new NotFoundException(
-            `Plan configuration error: ${subscription.plan.name} is missing pins_per_group limit`,
-          );
-        }
-        maxPinsPerGroup = subscription.plan.limits.pins_per_group;
-      } else {
-        const freePlan = await this.plansService.findByName('free');
-        if (typeof freePlan.limits?.pins_per_group !== 'number') {
-          throw new NotFoundException(
-            'Plan configuration error: free plan is missing pins_per_group limit',
-          );
-        }
-        maxPinsPerGroup = freePlan.limits.pins_per_group;
-      }
-
-      if (createPinGroupResourceDto.pins.length > maxPinsPerGroup) {
-        throw new BadRequestException(
-          `Pin group cannot have more than ${maxPinsPerGroup} pins in the current plan.`,
-        );
-      }
+      await this.subscriptionsService.validateSubscriptionLimits(
+        collection.mural.userId,
+        'pins_per_group',
+        createPinGroupResourceDto.pins.length,
+      );
 
       const pinOrders = createPinGroupResourceDto.pins.map((pin) => pin.order);
 
@@ -225,6 +209,92 @@ export class ResourcesService {
         throw new NotFoundException(
           'Pin group has invalid order sequence. Pins must be in correct ascending order.',
         );
+      }
+
+      const sharedPinsMap = new Map<string, PinEntity>();
+
+      for (const pinDto of createPinGroupResourceDto.pins) {
+        if (this.isSharePinDto(pinDto)) {
+          const sharedPin = await manager.findOne(PinEntity, {
+            where: { id: pinDto.sharedPinId },
+            relations: [
+              'pinMeta',
+              'variants',
+              'resource',
+              'resource.collection',
+            ],
+          });
+
+          if (!sharedPin) {
+            throw new NotFoundException(
+              `Shared pin ${pinDto.sharedPinId} not found`,
+            );
+          }
+
+          if (
+            !sharedPin.resource?.collection?.muralId ||
+            sharedPin.resource.collection.muralId !==
+              (pinDto.sourceMuralId || '')
+          ) {
+            throw new NotFoundException(
+              `Shared pin ${pinDto.sharedPinId} does not belong to the specified source mural`,
+            );
+          }
+
+          if (!sharedPin.pinMeta?.firstPinId) {
+            throw new NotFoundException(
+              `Shared pin ${pinDto.sharedPinId} has invalid metadata: missing firstPinId`,
+            );
+          }
+
+          if (
+            pinDto.additionalVariants &&
+            pinDto.additionalVariants.length > 0
+          ) {
+            const variantOrders = pinDto.additionalVariants.map(
+              (v: CreateVariantDto) => v.order,
+            );
+            if (
+              !this.fractionalIndexingService.validateOrderSequence(
+                variantOrders,
+              )
+            ) {
+              throw new NotFoundException(
+                `Pin contains variants with invalid order sequence. Variants must be in correct ascending order.`,
+              );
+            }
+
+            await this.subscriptionsService.validateSubscriptionLimits(
+              collection.mural.userId,
+              'overlapping_variants',
+              pinDto.additionalVariants.length,
+            );
+          }
+
+          sharedPinsMap.set(pinDto.sharedPinId, sharedPin);
+        } else {
+          // New Pin Validation
+          if (pinDto.variants && pinDto.variants.length > 0) {
+            const variantOrders = pinDto.variants.map(
+              (v: CreateVariantDto) => v.order,
+            );
+            if (
+              !this.fractionalIndexingService.validateOrderSequence(
+                variantOrders,
+              )
+            ) {
+              throw new NotFoundException(
+                `Pin contains variants with invalid order sequence. Variants must be in correct ascending order.`,
+              );
+            }
+
+            await this.subscriptionsService.validateSubscriptionLimits(
+              collection.mural.userId,
+              'variants_per_pin',
+              pinDto.variants.length,
+            );
+          }
+        }
       }
 
       const lastResource = await manager
@@ -258,59 +328,14 @@ export class ResourcesService {
 
       for (const pinDto of createPinGroupResourceDto.pins) {
         if (this.isSharePinDto(pinDto)) {
-          // shared pins logic
-          const sharedPin = await manager.findOne(PinEntity, {
-            where: { id: pinDto.sharedPinId },
-            relations: [
-              'pinMeta',
-              'variants',
-              'resource',
-              'resource.collection',
-            ],
-          });
-
-          if (!sharedPin) {
-            throw new NotFoundException(
-              `Shared pin ${pinDto.sharedPinId} not found`,
+          const sharedPin = sharedPinsMap.get(pinDto.sharedPinId);
+          if (!sharedPin || !sharedPin.pinMeta) {
+            throw new InternalServerErrorException(
+              'Shared pin not found in pre-validation map',
             );
           }
 
-          // Validate that the shared pin belongs to the source mural
-          if (
-            !sharedPin.resource?.collection?.muralId ||
-            sharedPin.resource.collection.muralId !==
-              (pinDto.sourceMuralId || '')
-          ) {
-            throw new NotFoundException(
-              `Shared pin ${pinDto.sharedPinId} does not belong to the specified source mural`,
-            );
-          }
-
-          if (!sharedPin.pinMeta?.firstPinId) {
-            throw new NotFoundException(
-              `Shared pin ${pinDto.sharedPinId} has invalid metadata: missing firstPinId`,
-            );
-          }
-
-          if (
-            pinDto.additionalVariants &&
-            pinDto.additionalVariants.length > 0
-          ) {
-            const variantOrders = pinDto.additionalVariants.map(
-              (v: CreateVariantDto) => v.order,
-            );
-            if (
-              !this.fractionalIndexingService.validateOrderSequence(
-                variantOrders,
-              )
-            ) {
-              throw new NotFoundException(
-                `Pin contains variants with invalid order sequence. Variants must be in correct ascending order.`,
-              );
-            }
-          }
-
-          const currentHistory = sharedPin.pinMeta?.history || [];
+          const currentHistory = sharedPin.pinMeta.history || [];
           const newHistory = this.generateHistory(
             currentHistory,
             pinDto.sourceMuralId || '',
@@ -337,18 +362,6 @@ export class ResourcesService {
 
           createdPins.push(await manager.save(pin));
         } else {
-          // New pin logic
-          const variantOrders = pinDto.variants.map(
-            (v: CreateVariantDto) => v.order,
-          );
-          if (
-            !this.fractionalIndexingService.validateOrderSequence(variantOrders)
-          ) {
-            throw new NotFoundException(
-              `Pin contains variants with invalid order sequence. Variants must be in correct ascending order.`,
-            );
-          }
-
           const pinMeta = manager.create(PinMetaEntity);
 
           const variants = pinDto.variants.map((v: CreateVariantDto) =>
@@ -365,6 +378,7 @@ export class ResourcesService {
           const savedPin = await manager.save(pin);
 
           savedPin.pinMeta.firstPinId = savedPin.id;
+
           await manager.save(savedPin.pinMeta);
 
           createdPins.push(savedPin);
@@ -386,16 +400,23 @@ export class ResourcesService {
     return await this.dataSource.transaction(async (manager) => {
       const collection = await manager.findOne(CollectionEntity, {
         where: { id: collectionId },
+        relations: ['mural'],
       });
 
       if (!collection) throw new NotFoundException('Collection not found');
 
       const sharedPin = await manager.findOne(PinEntity, {
         where: { id: sharePinResourceDto.sharedPinId },
-        relations: ['pinMeta', 'variants', 'resource', 'resource.collection'],
+        relations: ['pinMeta', 'resource', 'resource.collection'],
       });
 
       if (!sharedPin) throw new NotFoundException('Shared pin not found');
+
+      if (!sharedPin.pinMeta?.firstPinId) {
+        throw new NotFoundException(
+          'Shared pin has invalid metadata: missing firstPinId',
+        );
+      }
 
       if (
         !sharedPin.resource?.collection?.muralId ||
@@ -406,6 +427,36 @@ export class ResourcesService {
           'Shared pin does not belong to the specified source mural',
         );
       }
+
+      if (sharePinResourceDto.additionalVariants) {
+        const variantOrders = sharePinResourceDto.additionalVariants.map(
+          (v) => v.order,
+        );
+        if (
+          !this.fractionalIndexingService.validateOrderSequence(variantOrders)
+        ) {
+          throw new NotFoundException(
+            'Additional variants have invalid order sequence. Variants must be in correct ascending order.',
+          );
+        }
+
+        await this.subscriptionsService.validateSubscriptionLimits(
+          collection.mural.userId,
+          'overlapping_variants',
+          sharePinResourceDto.additionalVariants.length,
+        );
+      }
+
+      const currentHistory = sharedPin.pinMeta?.history || [];
+      await this.subscriptionsService.validateSubscriptionLimits(
+        collection.mural.userId,
+        'own_mural_share_sequence',
+        0, // Not used for this validation type
+        {
+          history: currentHistory,
+          currentMuralId: collection.muralId,
+        },
+      );
 
       const lastResource = await manager
         .createQueryBuilder(ResourceEntity, 'resource')
@@ -426,36 +477,16 @@ export class ResourcesService {
       });
       const savedResource = await manager.save(resource);
 
-      const currentHistory = sharedPin.pinMeta?.history || [];
       const newHistory = this.generateHistory(
         currentHistory,
         sharePinResourceDto.sourceMuralId,
       );
-
-      if (!sharedPin.pinMeta?.firstPinId) {
-        throw new NotFoundException(
-          'Shared pin has invalid metadata: missing firstPinId',
-        );
-      }
 
       const pinMeta = manager.create(PinMetaEntity, {
         firstPinId: sharedPin.pinMeta.firstPinId,
         sharedPinId: sharePinResourceDto.sharedPinId,
         history: newHistory,
       });
-
-      if (sharePinResourceDto.additionalVariants) {
-        const variantOrders = sharePinResourceDto.additionalVariants.map(
-          (v) => v.order,
-        );
-        if (
-          !this.fractionalIndexingService.validateOrderSequence(variantOrders)
-        ) {
-          throw new NotFoundException(
-            'Additional variants have invalid order sequence. Variants must be in correct ascending order.',
-          );
-        }
-      }
 
       const variants =
         sharePinResourceDto.additionalVariants?.map((v) =>
@@ -485,6 +516,7 @@ export class ResourcesService {
     return await this.dataSource.transaction(async (manager) => {
       const collection = await manager.findOne(CollectionEntity, {
         where: { id: collectionId },
+        relations: ['mural'],
       });
 
       if (!collection) throw new NotFoundException('Collection not found');
@@ -512,6 +544,120 @@ export class ResourcesService {
         throw new NotFoundException(
           'Shared resource has invalid metadata: missing firstResourceId',
         );
+      }
+
+      const resourceHistory = sharedResource.resourceMeta?.history || [];
+      await this.subscriptionsService.validateSubscriptionLimits(
+        collection.mural.userId,
+        'own_mural_share_sequence',
+        0,
+        {
+          history: resourceHistory,
+          currentMuralId: collection.muralId,
+        },
+      );
+
+      // Validate and pre-fetch all shared pins if additionalPins exist
+      const sharedPinsMap = new Map<string, PinEntity>();
+
+      if (sharePinGroupResourceDto.additionalPins) {
+        const additionalPinOrders = sharePinGroupResourceDto.additionalPins.map(
+          (pin) => pin.order,
+        );
+
+        if (
+          !this.fractionalIndexingService.validateOrderSequence(
+            additionalPinOrders,
+          )
+        ) {
+          throw new NotFoundException(
+            'Additional pins have invalid order sequence. Pins must be in correct ascending order.',
+          );
+        }
+
+        await this.subscriptionsService.validateSubscriptionLimits(
+          collection.mural.userId,
+          'overlapping_pins',
+          sharePinGroupResourceDto.additionalPins.length,
+        );
+
+        for (const pinDto of sharePinGroupResourceDto.additionalPins) {
+          if (this.isSharePinDto(pinDto)) {
+            const sharedPin = await manager.findOne(PinEntity, {
+              where: { id: pinDto.sharedPinId },
+              relations: ['pinMeta', 'resource', 'resource.collection'],
+            });
+
+            if (!sharedPin) {
+              throw new NotFoundException(
+                `Shared pin ${pinDto.sharedPinId} not found`,
+              );
+            }
+
+            if (
+              !sharedPin.resource?.collection?.muralId ||
+              sharedPin.resource.collection.muralId !==
+                (pinDto.sourceMuralId || '')
+            ) {
+              throw new NotFoundException(
+                `Shared pin ${pinDto.sharedPinId} does not belong to the specified source mural`,
+              );
+            }
+
+            if (!sharedPin.pinMeta?.firstPinId) {
+              throw new NotFoundException(
+                `Shared pin ${pinDto.sharedPinId} has invalid metadata: missing firstPinId`,
+              );
+            }
+
+            if (
+              pinDto.additionalVariants &&
+              pinDto.additionalVariants.length > 0
+            ) {
+              const variantOrders = pinDto.additionalVariants.map(
+                (v: CreateVariantDto) => v.order,
+              );
+              if (
+                !this.fractionalIndexingService.validateOrderSequence(
+                  variantOrders,
+                )
+              ) {
+                throw new NotFoundException(
+                  'Pin contains variants with invalid order sequence.',
+                );
+              }
+
+              await this.subscriptionsService.validateSubscriptionLimits(
+                collection.mural.userId,
+                'overlapping_variants',
+                pinDto.additionalVariants.length,
+              );
+            }
+
+            sharedPinsMap.set(pinDto.sharedPinId, sharedPin);
+          } else {
+            if (pinDto.variants && pinDto.variants.length > 0) {
+              const variantOrders = pinDto.variants.map(
+                (v: CreateVariantDto) => v.order,
+              );
+              if (
+                !this.fractionalIndexingService.validateOrderSequence(
+                  variantOrders,
+                )
+              ) {
+                throw new NotFoundException(
+                  'Pin contains variants with invalid order sequence.',
+                );
+              }
+
+              await this.subscriptionsService.validateSubscriptionLimits(
+                collection.mural.userId,
+                'variants_per_pin',
+                pinDto.variants.length,
+              );
+            }
+          }
+        }
       }
 
       const lastResource = await manager
@@ -550,51 +696,12 @@ export class ResourcesService {
       const createdPins: PinEntity[] = [];
 
       if (sharePinGroupResourceDto.additionalPins) {
-        const additionalPinOrders = sharePinGroupResourceDto.additionalPins.map(
-          (pin) => pin.order,
-        );
-
-        if (
-          !this.fractionalIndexingService.validateOrderSequence(
-            additionalPinOrders,
-          )
-        ) {
-          throw new NotFoundException(
-            'Additional pins have invalid order sequence. Pins must be in correct ascending order.',
-          );
-        }
-
         for (const pinDto of sharePinGroupResourceDto.additionalPins) {
           if (this.isSharePinDto(pinDto)) {
-            const sharedPin = await manager.findOne(PinEntity, {
-              where: { id: pinDto.sharedPinId },
-              relations: [
-                'pinMeta',
-                'variants',
-                'resource',
-                'resource.collection',
-              ],
-            });
-
-            if (!sharedPin) {
-              throw new NotFoundException(
-                `Shared pin ${pinDto.sharedPinId} not found`,
-              );
-            }
-
-            if (
-              !sharedPin.resource?.collection?.muralId ||
-              sharedPin.resource.collection.muralId !==
-                (pinDto.sourceMuralId || '')
-            ) {
-              throw new NotFoundException(
-                `Shared pin ${pinDto.sharedPinId} does not belong to the specified source mural`,
-              );
-            }
-
-            if (!sharedPin.pinMeta?.firstPinId) {
-              throw new NotFoundException(
-                `Shared pin ${pinDto.sharedPinId} has invalid metadata: missing firstPinId`,
+            const sharedPin = sharedPinsMap.get(pinDto.sharedPinId);
+            if (!sharedPin || !sharedPin.pinMeta) {
+              throw new InternalServerErrorException(
+                'Shared pin not found in pre-validation map',
               );
             }
 
@@ -609,24 +716,6 @@ export class ResourcesService {
               sharedPinId: pinDto.sharedPinId,
               history: newHistory,
             });
-
-            if (
-              pinDto.additionalVariants &&
-              pinDto.additionalVariants.length > 0
-            ) {
-              const variantOrders = pinDto.additionalVariants.map(
-                (v: CreateVariantDto) => v.order,
-              );
-              if (
-                !this.fractionalIndexingService.validateOrderSequence(
-                  variantOrders,
-                )
-              ) {
-                throw new NotFoundException(
-                  'Pin contains variants with invalid order sequence.',
-                );
-              }
-            }
 
             const variants = pinDto.additionalVariants
               ? pinDto.additionalVariants.map((v: CreateVariantDto) =>
@@ -643,23 +732,9 @@ export class ResourcesService {
 
             createdPins.push(await manager.save(pin));
           } else {
-            // New pin logic
             const pinMeta = manager.create(PinMetaEntity, {
               history: [],
             });
-
-            const variantOrders = pinDto.variants.map(
-              (v: CreateVariantDto) => v.order,
-            );
-            if (
-              !this.fractionalIndexingService.validateOrderSequence(
-                variantOrders,
-              )
-            ) {
-              throw new NotFoundException(
-                'Pin contains variants with invalid order sequence.',
-              );
-            }
 
             const variants = pinDto.variants.map((v: CreateVariantDto) =>
               manager.create(VariantEntity, v),

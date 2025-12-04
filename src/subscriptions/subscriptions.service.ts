@@ -6,7 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Subscription } from './entities/subscription.entity';
 import { PlansService } from 'src/plans/plans.service';
-import { Repository } from 'typeorm';
+import { Repository, EntityManager } from 'typeorm';
 import { SubscriptionStatus } from './types/subscription-status.type';
 
 @Injectable()
@@ -73,7 +73,10 @@ export class SubscriptionsService {
    * Subscribe a new user to the default (FREE) plan.
    * This should be called during user registration/account creation.
    */
-  async subscribeToDefault(userId: string): Promise<Subscription> {
+  async subscribeToDefault(
+    userId: string,
+    manager?: EntityManager,
+  ): Promise<Subscription> {
     const existingSubscription = await this.findUserActiveSubscription(userId);
 
     if (existingSubscription) {
@@ -83,7 +86,7 @@ export class SubscriptionsService {
     const defaultPlan = await this.plansService.findDefaultPlan();
 
     const farFuture = new Date();
-    farFuture.setFullYear(farFuture.getFullYear() + 100);
+    farFuture.setFullYear(farFuture.getFullYear() + 10);
 
     const subscription = this.subscriptionsRepository.create({
       userId,
@@ -92,6 +95,10 @@ export class SubscriptionsService {
       startAt: new Date(),
       currentPeriodEnd: farFuture,
     });
+
+    if (manager) {
+      return manager.save(Subscription, subscription);
+    }
 
     return this.subscriptionsRepository.save(subscription);
   }
@@ -215,5 +222,88 @@ export class SubscriptionsService {
       currentPeriodEnd: subscription.currentPeriodEnd,
       isCancelled: subscription.isCancelled(),
     };
+  }
+
+  async validateSubscriptionLimits(
+    userId: string,
+    limitKey: string,
+    valueToCheck: number,
+    options?: {
+      history?: { sourceMuralId: string; order: number }[];
+      currentMuralId?: string;
+    },
+  ): Promise<void> {
+    let limitValue: number | string;
+    const subscription = await this.findUserActiveSubscription(userId);
+
+    if (subscription?.plan) {
+      const limits = subscription.plan.limits as Record<
+        string,
+        number | string
+      >;
+      if (
+        typeof limits?.[limitKey] !== 'number' &&
+        limits?.[limitKey] !== 'unlimited'
+      ) {
+        throw new NotFoundException(
+          `Plan configuration error: ${subscription.plan.name} is missing ${limitKey} limit`,
+        );
+      }
+      limitValue = limits[limitKey];
+    } else {
+      const freePlan = await this.plansService.findByName('free');
+      const limits = freePlan.limits as Record<string, number | string>;
+      if (
+        typeof limits?.[limitKey] !== 'number' &&
+        limits?.[limitKey] !== 'unlimited'
+      ) {
+        throw new NotFoundException(
+          `Plan configuration error: free plan is missing ${limitKey} limit`,
+        );
+      }
+      limitValue = limits[limitKey];
+    }
+
+    if (limitValue === 'unlimited') {
+      return;
+    }
+
+    if (limitKey === 'own_mural_share_sequence') {
+      if (!options?.history || !options?.currentMuralId) {
+        throw new BadRequestException(
+          'History and currentMuralId are required for own_mural_share_sequence validation',
+        );
+      }
+
+      const sortedHistory = [...options.history].sort(
+        (a, b) => b.order - a.order,
+      );
+
+      let consecutiveCount = 0;
+      for (const item of sortedHistory) {
+        if (item.sourceMuralId === options.currentMuralId) {
+          consecutiveCount++;
+        } else {
+          break; // Stop counting when we find a different mural
+        }
+      }
+
+      if (consecutiveCount >= (limitValue as number)) {
+        throw new BadRequestException(
+          `Limit exceeded: cannot share from your own mural more than ${limitValue} times in sequence.`,
+        );
+      }
+
+      return;
+    }
+
+    if (valueToCheck > (limitValue as number)) {
+      throw new BadRequestException(
+        `Limit exceeded: cannot have more than ${limitValue} ${limitKey.replace(
+          /_/g,
+          ' ',
+        )} in the current plan.`,
+      );
+    }
   }
 }

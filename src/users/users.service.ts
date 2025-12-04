@@ -4,7 +4,12 @@ import {
   BadRequestException,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { DataSource, FindOptionsWhere, Repository } from 'typeorm';
+import {
+  DataSource,
+  FindOptionsWhere,
+  Repository,
+  EntityManager,
+} from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 
 import { CredentialsService } from 'src/credentials/credentials.service';
@@ -72,38 +77,44 @@ export class UsersService {
     return response;
   }
 
-  async create(createUserDto: CreateUserDto): Promise<CreateUserResponseDto> {
-    const response: CreateUserResponseDto = await this.dataSource.transaction(
-      async (manager) => {
-        const existingUser = await this.usersRepository.findOne({
-          where: { email: createUserDto.email },
-        });
+  async create(
+    createUserDto: CreateUserDto,
+    manager?: EntityManager,
+  ): Promise<CreateUserResponseDto> {
+    const execute = async (entityManager: EntityManager) => {
+      const existingUser = await entityManager.findOne(UserEntity, {
+        where: { email: createUserDto.email },
+      });
 
-        if (existingUser) {
-          await this.cacheService.del(this.USER_CACHE_KEY(existingUser.id));
-        }
+      if (existingUser) {
+        await this.cacheService.del(this.USER_CACHE_KEY(existingUser.id));
+      }
 
-        await this.validateEmailDoesNotExist(createUserDto.email);
+      await this.validateEmailDoesNotExist(createUserDto.email);
 
-        const hashedPassword = await this.credentialsService.hashPassword(
-          createUserDto.password,
-        );
+      const hashedPassword = await this.credentialsService.hashPassword(
+        createUserDto.password,
+      );
 
-        const user = manager.create(UserEntity, {
-          ...createUserDto,
-          password: hashedPassword,
-        });
+      const user = entityManager.create(UserEntity, {
+        ...createUserDto,
+        password: hashedPassword,
+      });
 
-        const savedUser = await manager.save(UserEntity, user);
+      const savedUser = await entityManager.save(UserEntity, user);
 
-        return {
-          id: savedUser.id,
-          username: savedUser.username,
-          email: savedUser.email,
-        };
-      },
-    );
-    return response;
+      return {
+        id: savedUser.id,
+        username: savedUser.username,
+        email: savedUser.email,
+      };
+    };
+
+    if (manager) {
+      return execute(manager);
+    }
+
+    return this.dataSource.transaction(execute);
   }
 
   async update(
