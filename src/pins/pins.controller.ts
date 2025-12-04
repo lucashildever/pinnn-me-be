@@ -10,7 +10,7 @@ export class PinsController {
   constructor(private readonly pinsService: PinsService) {}
 
   @Get()
-  async findPins(
+  async getPins(
     @Query() query: FindPinsQueryDto,
   ): Promise<PaginatedPinsResponseDto> {
     const { resourceId, ...paginationQuery } = query;
@@ -18,7 +18,7 @@ export class PinsController {
   }
 
   @Get(':pinId/variants')
-  async findVariants(
+  async getVariants(
     @Param('pinId', ParseUUIDPipe) pinId: string,
     @Query() query: PaginationQueryDto,
   ): Promise<PaginatedVariantsResponseDto> {
