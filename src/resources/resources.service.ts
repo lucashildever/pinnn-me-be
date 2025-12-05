@@ -63,19 +63,25 @@ export class ResourcesService {
     const pinsByResource =
       await this.pinsService.findBatchPreviews(resourceIds);
 
-    const transformedResources = resources.map((resource) => ({
-      id: resource.id,
-      order: resource.order,
-      pins: pinsByResource.get(resource.id) || [],
-      meta: resource.resourceMeta
+    const transformedResources = resources.map((resource) => {
+      const pins = pinsByResource.get(resource.id) || [];
+      const meta = resource.resourceMeta
         ? {
             sharedResourceId: resource.resourceMeta.sharedResourceId,
             firstResourceId: resource.resourceMeta.firstResourceId,
             groupName: resource.resourceMeta.groupName,
             history: resource.resourceMeta.history,
           }
-        : undefined,
-    }));
+        : undefined;
+
+      return {
+        id: resource.id,
+        order: resource.order,
+        type: this.defineResourceType(meta, pins),
+        pins,
+        meta,
+      };
+    });
 
     return {
       resources: transformedResources,
@@ -101,18 +107,22 @@ export class ResourcesService {
       resource.id,
     ]);
 
+    const pins = pinsByResource.get(resource.id) || [];
+    const meta = resource.resourceMeta
+      ? {
+          sharedResourceId: resource.resourceMeta.sharedResourceId,
+          firstResourceId: resource.resourceMeta.firstResourceId,
+          groupName: resource.resourceMeta.groupName,
+          history: resource.resourceMeta.history,
+        }
+      : undefined;
+
     return {
       id: resource.id,
       order: resource.order,
-      pins: pinsByResource.get(resource.id) || [],
-      meta: resource.resourceMeta
-        ? {
-            sharedResourceId: resource.resourceMeta.sharedResourceId,
-            firstResourceId: resource.resourceMeta.firstResourceId,
-            groupName: resource.resourceMeta.groupName,
-            history: resource.resourceMeta.history,
-          }
-        : undefined,
+      type: this.defineResourceType(meta, pins),
+      pins,
+      meta,
     };
   }
 
@@ -180,6 +190,7 @@ export class ResourcesService {
       return {
         id: savedResource.id,
         order: savedResource.order,
+        type: 'pin',
         pins: [this.mapPinToDto(savedPin)],
       };
     });
@@ -388,7 +399,14 @@ export class ResourcesService {
       return {
         id: savedResource.id,
         order: savedResource.order,
+        type: 'pin-group',
         pins: createdPins.map((pin) => this.mapPinToDto(pin)),
+        meta: {
+          groupName: savedResource.resourceMeta.groupName,
+          firstResourceId: savedResource.resourceMeta.firstResourceId,
+          history: savedResource.resourceMeta.history,
+          sharedResourceId: savedResource.resourceMeta.sharedResourceId,
+        },
       };
     });
   }
@@ -504,6 +522,7 @@ export class ResourcesService {
       return {
         id: savedResource.id,
         order: savedResource.order,
+        type: 'shared-pin',
         pins: [this.mapPinToDto(savedPin)],
       };
     });
@@ -760,7 +779,14 @@ export class ResourcesService {
       return {
         id: savedResource.id,
         order: savedResource.order,
+        type: 'shared-pin-group',
         pins: createdPins.map((pin) => this.mapPinToDto(pin)),
+        meta: {
+          groupName: savedResource.resourceMeta.groupName,
+          firstResourceId: savedResource.resourceMeta.firstResourceId,
+          history: savedResource.resourceMeta.history,
+          sharedResourceId: savedResource.resourceMeta.sharedResourceId,
+        },
       };
     });
   }
@@ -1093,6 +1119,13 @@ export class ResourcesService {
     return {
       id: pin.id,
       order: pin.order,
+      meta: pin.pinMeta
+        ? {
+            sharedPinId: pin.pinMeta.sharedPinId,
+            firstPinId: pin.pinMeta.firstPinId,
+            history: pin.pinMeta.history,
+          }
+        : undefined,
       variants: pin.variants.map((variant) => ({
         id: variant.id,
         order: variant.order,
@@ -1108,5 +1141,21 @@ export class ResourcesService {
     order?: string;
   } {
     return 'sharedPinId' in pin && pin.sharedPinId !== undefined;
+  }
+
+  private defineResourceType(
+    resourceMeta: any | undefined,
+    pins: any[],
+  ): 'pin' | 'shared-pin' | 'pin-group' | 'shared-pin-group' {
+    if (resourceMeta) {
+      return resourceMeta.sharedResourceId ? 'shared-pin-group' : 'pin-group';
+    }
+
+    const firstPin = pins[0];
+    if (firstPin?.meta?.sharedPinId) {
+      return 'shared-pin';
+    }
+
+    return 'pin';
   }
 }
