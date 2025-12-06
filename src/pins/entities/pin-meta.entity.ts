@@ -18,6 +18,9 @@ export class PinMetaEntity {
   @Column({ type: 'uuid', nullable: true })
   firstPinId: string;
 
+  @Column({ type: 'int', nullable: true })
+  inheritedVariantsTotal: number;
+
   @Column('json', { nullable: false })
   history: { sourceMuralId: string; order: number }[] = [];
 

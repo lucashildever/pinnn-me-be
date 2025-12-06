@@ -14,6 +14,16 @@ import { VariantDto } from './variant/variant.dto';
 import { Type } from 'class-transformer';
 
 import { PinMetaDto } from './pin-meta.dto';
+import { PaginationMetaDto } from 'src/common/dto/pagination/pagination-meta.dto';
+
+export class PaginatedVariantsDto {
+  data: VariantDto[];
+  pagination: PaginationMetaDto;
+}
+
+export class PinFromSharedDto {
+  variants: PaginatedVariantsDto;
+}
 
 export class PinDto {
   @IsUUID()
@@ -38,5 +48,8 @@ export class PinDto {
   @ArrayMinSize(1, { message: 'At least one variant is required' })
   @ValidateNested({ each: true })
   @Type(() => VariantDto)
-  variants: VariantDto[];
+  variants: PaginatedVariantsDto;
+
+  @IsOptional()
+  fromShared?: PinFromSharedDto;
 }

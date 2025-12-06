@@ -21,6 +21,9 @@ export class ResourceMetaEntity {
   @Column({ type: 'varchar', nullable: true })
   groupName: string | null;
 
+  @Column({ type: 'int', nullable: true })
+  inheritedPinsTotal: number;
+
   @Column('json', { nullable: false })
   history: { sourceMuralId: string; order: number }[] = [];
 

@@ -33,6 +33,9 @@ describe('ResourcesService', () => {
 
   const mockPinsService = {
     findBatchPreviews: jest.fn(),
+    findVariants: jest.fn(),
+    getPinCountsByResourceIds: jest.fn(),
+    getPinCountByResourceId: jest.fn(),
   };
 
   const mockSubscriptionsService = {
@@ -107,12 +110,19 @@ describe('ResourcesService', () => {
         ['res-1', [{ id: 'pin-1' } as PinDto]],
         ['res-2', []],
       ]);
+      const mockPinCounts = new Map<string, number>([
+        ['res-1', 5],
+        ['res-2', 0],
+      ]);
 
       mockQueryBuilder.getManyAndCount.mockResolvedValue([
         mockResources,
         total,
       ]);
       mockPinsService.findBatchPreviews.mockResolvedValue(mockPinsMap);
+      mockPinsService.getPinCountsByResourceIds.mockResolvedValue(
+        mockPinCounts,
+      );
 
       const result = await service.findResources(collectionId, paginationQuery);
 
@@ -133,15 +143,21 @@ describe('ResourcesService', () => {
         'res-1',
         'res-2',
       ]);
+      expect(pinsService.getPinCountsByResourceIds).toHaveBeenCalledWith([
+        'res-1',
+        'res-2',
+      ]);
 
       expect(result.resources).toHaveLength(2);
       expect(result.resources[0].id).toBe('res-1');
       expect(result.resources[0].meta).toBeDefined();
       expect(result.resources[0].meta!.groupName).toBe('Group 1');
-      expect(result.resources[0].pins).toHaveLength(1);
+      expect(result.resources[0].pins.data).toHaveLength(1);
+      expect(result.resources[0].pins.pagination.totalItems).toBe(5);
       expect(result.resources[1].id).toBe('res-2');
       expect(result.resources[1].meta).toBeUndefined();
-      expect(result.resources[1].pins).toHaveLength(0);
+      expect(result.resources[1].pins.data).toHaveLength(0);
+      expect(result.resources[1].pins.pagination.totalItems).toBe(0);
       expect(result.pagination).toEqual({
         currentPage: 1,
         totalItems: 2,
@@ -155,6 +171,7 @@ describe('ResourcesService', () => {
 
       mockQueryBuilder.getManyAndCount.mockResolvedValue([[], 0]);
       mockPinsService.findBatchPreviews.mockResolvedValue(new Map());
+      mockPinsService.getPinCountsByResourceIds.mockResolvedValue(new Map());
 
       const result = await service.findResources(collectionId, paginationQuery);
 
@@ -169,6 +186,7 @@ describe('ResourcesService', () => {
 
       mockQueryBuilder.getManyAndCount.mockResolvedValue([mockResources, 0]);
       mockPinsService.findBatchPreviews.mockResolvedValue(new Map());
+      mockPinsService.getPinCountsByResourceIds.mockResolvedValue(new Map());
 
       await service.findResources(collectionId, paginationQuery);
 
@@ -191,6 +209,7 @@ describe('ResourcesService', () => {
 
       mockQueryBuilder.getOne.mockResolvedValue(mockResource);
       mockPinsService.findBatchPreviews.mockResolvedValue(mockPinsMap);
+      mockPinsService.getPinCountByResourceId.mockResolvedValue(5);
 
       const result = await service.findResource(resourceId);
 
@@ -206,11 +225,15 @@ describe('ResourcesService', () => {
         { status: 'active' },
       );
       expect(pinsService.findBatchPreviews).toHaveBeenCalledWith([resourceId]);
+      expect(pinsService.getPinCountByResourceId).toHaveBeenCalledWith(
+        resourceId,
+      );
 
       expect(result.id).toBe(resourceId);
       expect(result.meta).toBeDefined();
       expect(result.meta!.groupName).toBe('Group 1');
-      expect(result.pins).toHaveLength(1);
+      expect(result.pins.data).toHaveLength(1);
+      expect(result.pins.pagination.totalItems).toBe(5);
     });
 
     it('should throw NotFoundException if resource not found', async () => {
@@ -238,6 +261,7 @@ describe('ResourcesService', () => {
 
       mockQueryBuilder.getOne.mockResolvedValue(mockResource);
       mockPinsService.findBatchPreviews.mockResolvedValue(new Map());
+      mockPinsService.getPinCountByResourceId.mockResolvedValue(0);
 
       const result = await service.findResource(resourceId);
 
@@ -349,7 +373,15 @@ describe('ResourcesService', () => {
       expect(result).toEqual({
         id: savedResource.id,
         order: savedResource.order,
-        pins: expect.any(Array),
+        type: 'pin',
+        pins: expect.objectContaining({
+          data: expect.any(Array),
+          pagination: expect.objectContaining({
+            currentPage: 1,
+            totalItems: 1,
+            itemsPerPage: 4,
+          }),
+        }),
       });
     });
 
@@ -379,6 +411,136 @@ describe('ResourcesService', () => {
       await expect(
         service.createPinResource(collectionId, createPinResourceDto),
       ).rejects.toThrow('Limit exceeded');
+    });
+  });
+
+  describe('sharePinResource - fromShared logic', () => {
+    const collectionId = 'collection-1';
+    const sharePinResourceDto = {
+      sharedPinId: 'shared-pin-1',
+      sourceMuralId: 'source-mural-1',
+      additionalVariants: [],
+    } as any;
+
+    const mockCollection = {
+      id: collectionId,
+      mural: { userId: 'user-1', id: 'mural-1' },
+      muralId: 'mural-1',
+    };
+
+    const mockSharedPin = {
+      id: 'shared-pin-1',
+      pinMeta: {
+        firstPinId: 'first-pin-1',
+        history: [],
+      },
+      resource: {
+        collection: { muralId: 'source-mural-1' },
+      },
+    };
+
+    const mockManager = {
+      findOne: jest.fn(),
+      create: jest.fn(),
+      save: jest.fn(),
+      createQueryBuilder: jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue(null),
+      })),
+    };
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      mockDataSource.transaction.mockImplementation((cb) => cb(mockManager));
+      mockManager.findOne
+        .mockResolvedValueOnce(mockCollection) // collection
+        .mockResolvedValueOnce(mockSharedPin); // shared pin
+      mockFractionalIndexingService['validateOrderSequence'] = jest
+        .fn()
+        .mockReturnValue(true);
+      mockFractionalIndexingService['generateKeyBetween'] = jest
+        .fn()
+        .mockReturnValue('a1');
+      mockSubscriptionsService.validateSubscriptionLimits.mockResolvedValue(
+        undefined,
+      );
+      mockManager.save.mockImplementation((entity) =>
+        Promise.resolve({ ...entity, id: 'saved-id' }),
+      );
+      mockManager.create.mockImplementation((entity, dto) => dto || entity);
+    });
+
+    it('should NOT call findVariants when own variants >= DEFAULT_ITEMS_LIMIT', async () => {
+      const savedResource = { id: 'res-1', order: 'a1' };
+      const savedPin = {
+        id: 'pin-1',
+        pinMeta: { sharedPinId: 'shared-pin-1', firstPinId: 'first-pin-1' },
+        variants: [
+          { id: 'v-1', order: 'a0', config: {} },
+          { id: 'v-2', order: 'a1', config: {} },
+          { id: 'v-3', order: 'a2', config: {} },
+          { id: 'v-4', order: 'a3', config: {} },
+        ],
+      };
+
+      mockManager.save
+        .mockResolvedValueOnce(savedResource)
+        .mockResolvedValueOnce(savedPin);
+
+      const result = await service.sharePinResource(
+        collectionId,
+        sharePinResourceDto,
+      );
+
+      expect(mockPinsService.findVariants).not.toHaveBeenCalled();
+      expect(result.pins.data[0].fromShared).toBeUndefined();
+    });
+
+    it('should call findVariants with correct remaining count when own variants < DEFAULT_ITEMS_LIMIT', async () => {
+      const savedResource = { id: 'res-1', order: 'a1' };
+      const savedPin = {
+        id: 'pin-1',
+        pinMeta: { sharedPinId: 'shared-pin-1', firstPinId: 'first-pin-1' },
+        variants: [{ id: 'v-1', order: 'a0', config: {} }], // Only 1 variant, less than DEFAULT_ITEMS_LIMIT (4)
+      };
+
+      const mockSharedVariantsResult = {
+        variants: [
+          { id: 'shared-v-1', order: 'b0', config: {} },
+          { id: 'shared-v-2', order: 'b1', config: {} },
+        ],
+        pagination: {
+          currentPage: 1,
+          totalItems: 10,
+          itemsPerPage: 3,
+        },
+      };
+
+      mockManager.save
+        .mockResolvedValueOnce(savedResource)
+        .mockResolvedValueOnce(savedPin);
+      mockPinsService.findVariants.mockResolvedValue(mockSharedVariantsResult);
+
+      const result = await service.sharePinResource(
+        collectionId,
+        sharePinResourceDto,
+      );
+
+      // Should call with remaining = 4 - 1 = 3
+      expect(mockPinsService.findVariants).toHaveBeenCalledWith(
+        'shared-pin-1',
+        { page: 1, limit: 3 },
+      );
+
+      // Should include fromShared with nested variants structure
+      expect(result.pins.data[0].fromShared).toBeDefined();
+      expect(result.pins.data[0].fromShared?.variants.data).toHaveLength(2);
+      expect(
+        result.pins.data[0].fromShared?.variants.pagination.totalItems,
+      ).toBe(10);
     });
   });
 });

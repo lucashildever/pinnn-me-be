@@ -10,6 +10,7 @@ import { PinDto } from './dto/pin.dto';
 import { PaginationQueryDto } from 'src/common/dto/pagination/pagination-query.dto';
 import { PaginatedPinsResponseDto } from './dto/pagination/paginated-pins-response.dto';
 import { PaginatedVariantsResponseDto } from './dto/pagination/paginated-variants-response.dto';
+import { DEFAULT_ITEMS_LIMIT } from 'src/common/constants/pagination.constants';
 
 @Injectable()
 export class PinsService {
@@ -62,11 +63,18 @@ export class PinsService {
       return {
         id: updatedPin.id,
         order: updatedPin.order,
-        variants: updatedPin.variants.map((variant) => ({
-          id: variant.id,
-          order: variant.order,
-          config: variant.config,
-        })),
+        variants: {
+          data: updatedPin.variants.map((variant) => ({
+            id: variant.id,
+            order: variant.order,
+            config: variant.config,
+          })),
+          pagination: {
+            currentPage: 1,
+            totalItems: updatedPin.variants.length,
+            itemsPerPage: DEFAULT_ITEMS_LIMIT,
+          },
+        },
       };
     });
   }
@@ -96,14 +104,22 @@ export class PinsService {
           ? {
               sharedPinId: pin.pinMeta.sharedPinId,
               firstPinId: pin.pinMeta.firstPinId,
+              inheritedVariantsTotal: pin.pinMeta.inheritedVariantsTotal,
               history: pin.pinMeta.history,
             }
           : undefined,
-        variants: pin.variants.map((v) => ({
-          id: v.id,
-          order: v.order,
-          config: v.config,
-        })),
+        variants: {
+          data: pin.variants.map((v) => ({
+            id: v.id,
+            order: v.order,
+            config: v.config,
+          })),
+          pagination: {
+            currentPage: 1,
+            totalItems: pin.variants.length,
+            itemsPerPage: DEFAULT_ITEMS_LIMIT,
+          },
+        },
       })),
       pagination: {
         currentPage: page,
@@ -151,7 +167,7 @@ export class PinsService {
 
     const pinsRaw: any[] = await this.dataSource.query(
       `
-      SELECT p.*, pm.id as pm_id, pm.shared_pin_id, pm.first_pin_id, pm.history
+      SELECT p.*, pm.id as pm_id, pm.shared_pin_id, pm.first_pin_id, pm.inherited_variants_total, pm.history
       FROM (
         SELECT *, ROW_NUMBER() OVER (PARTITION BY \`resource_id\` ORDER BY \`order\` ASC) as rn
         FROM \`pins\`
@@ -166,6 +182,20 @@ export class PinsService {
     if (pinIds.length === 0) {
       return new Map(resourceIds.map((id) => [id, []]));
     }
+
+    // Get total variant count for each pin
+    const variantCountsRaw: any[] = await this.dataSource.query(
+      `
+      SELECT pin_id, COUNT(*) as total
+      FROM \`variants\`
+      WHERE \`pin_id\` IN (${pinIds.map((id) => `'${id}'`).join(',')})
+      GROUP BY pin_id
+    `,
+    );
+    const variantCounts = new Map<string, number>();
+    variantCountsRaw.forEach((vc) => {
+      variantCounts.set(vc.pin_id, parseInt(vc.total));
+    });
 
     const variantsRaw: any[] = await this.dataSource.query(
       `
@@ -192,6 +222,8 @@ export class PinsService {
     pinsRaw.forEach((p) => {
       if (!pinsByResource.has(p.resource_id))
         pinsByResource.set(p.resource_id, []);
+      const variantsData = variantsByPin.get(p.id) || [];
+      const totalVariants = variantCounts.get(p.id) || variantsData.length;
       pinsByResource.get(p.resource_id)?.push({
         id: p.id,
         order: p.order,
@@ -199,16 +231,58 @@ export class PinsService {
           ? {
               sharedPinId: p.shared_pin_id,
               firstPinId: p.first_pin_id,
+              inheritedVariantsTotal: p.inherited_variants_total,
               history:
                 typeof p.history === 'string'
                   ? JSON.parse(p.history)
                   : p.history || [],
             }
           : undefined,
-        variants: variantsByPin.get(p.id) || [],
+        variants: {
+          data: variantsData,
+          pagination: {
+            currentPage: 1,
+            totalItems: totalVariants,
+            itemsPerPage: DEFAULT_ITEMS_LIMIT,
+          },
+        },
       });
     });
 
     return pinsByResource;
+  }
+
+  async getPinCountsByResourceIds(
+    resourceIds: string[],
+  ): Promise<Map<string, number>> {
+    if (resourceIds.length === 0) return new Map();
+
+    const result: any[] = await this.dataSource.query(
+      `
+      SELECT resource_id, COUNT(*) as total
+      FROM \`pins\`
+      WHERE \`resource_id\` IN (${resourceIds.map((id) => `'${id}'`).join(',')})
+      GROUP BY resource_id
+    `,
+    );
+
+    const countMap = new Map<string, number>();
+    result.forEach((row) => {
+      countMap.set(row.resource_id, parseInt(row.total));
+    });
+
+    return countMap;
+  }
+
+  async getPinCountByResourceId(resourceId: string): Promise<number> {
+    const result = await this.dataSource.query(
+      `
+      SELECT COUNT(*) as total
+      FROM \`pins\`
+      WHERE \`resource_id\` = '${resourceId}'
+    `,
+    );
+
+    return result.length > 0 ? parseInt(result[0].total) : 0;
   }
 }
