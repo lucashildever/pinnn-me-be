@@ -1,6 +1,4 @@
-import { PartialType, OmitType } from '@nestjs/mapped-types';
+import { PartialType } from '@nestjs/mapped-types';
 import { VariantDto } from './variant.dto';
 
-export class UpdateVariantDto extends PartialType(
-  OmitType(VariantDto, ['order']),
-) {}
+export class UpdateVariantDto extends PartialType(VariantDto) {}

@@ -15,7 +15,7 @@ import { JwtAuthGuard } from 'src/auth/guards/jwt-auth-guard';
 import { ResourcesService } from './resources.service';
 import { PaginationQueryDto } from 'src/common/dto/pagination/pagination-query.dto';
 import { UpdatePinDto } from 'src/pins/dto/update-pin.dto';
-import { ReorderDto } from 'src/pins/dto/reorder.dto';
+import { ReorderResourceDto } from './dto/reorder-resource.dto';
 import { CreatePinResourceDto } from './dto/create-pin-resource.dto';
 import { SharePinResourceDto } from './dto/share-pin-resource.dto';
 import { CreatePinGroupResourceDto } from './dto/create-pin-group-resource.dto';
@@ -109,11 +109,11 @@ export class ResourcesController {
 
   @UseGuards(JwtAuthGuard)
   @Throttle({ default: { limit: 10, ttl: 1000 } })
-  @Patch('reorder/:entityId')
+  @Patch('reorder/:resourceId')
   async reorder(
-    @Param('entityId', new ParseUUIDPipe()) entityId: string,
-    @Body() reorderDto: ReorderDto,
+    @Param('resourceId', new ParseUUIDPipe()) resourceId: string,
+    @Body() reorderDto: ReorderResourceDto,
   ) {
-    return this.resourcesService.reorder(entityId, reorderDto);
+    return this.resourcesService.reorder(resourceId, reorderDto);
   }
 }

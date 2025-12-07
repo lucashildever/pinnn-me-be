@@ -1,8 +1,14 @@
-import { Logger, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Logger,
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
 import { VariantEntity } from './entities/variant.entity';
 import { PinEntity } from './entities/pin.entity';
+import { FractionalIndexingService } from 'src/common/services/fractional-indexing.service';
 
 import { UpdatePinDto } from './dto/update-pin.dto';
 import { PinDto } from './dto/pin.dto';
@@ -11,41 +17,97 @@ import { PaginationQueryDto } from 'src/common/dto/pagination/pagination-query.d
 import { PaginatedPinsResponseDto } from './dto/pagination/paginated-pins-response.dto';
 import { PaginatedVariantsResponseDto } from './dto/pagination/paginated-variants-response.dto';
 import { DEFAULT_ITEMS_LIMIT } from 'src/common/constants/pagination.constants';
+import { SubscriptionsService } from 'src/subscriptions/subscriptions.service';
+import { ReorderDto } from './dto/reorder.dto';
 
 @Injectable()
 export class PinsService {
   private readonly logger = new Logger(PinsService.name);
 
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly subscriptionsService: SubscriptionsService,
+    private readonly fractionalIndexingService: FractionalIndexingService,
+  ) {}
 
   async update(pinId: string, updatePinDto: UpdatePinDto): Promise<PinDto> {
+    const pin = await this.dataSource
+      .getRepository(PinEntity)
+      .createQueryBuilder('pin')
+      .leftJoinAndSelect('pin.variants', 'variants')
+      .leftJoinAndSelect('pin.resource', 'resource')
+      .leftJoinAndSelect('resource.collection', 'collection')
+      .leftJoinAndSelect('collection.mural', 'mural')
+      .where('pin.id = :pinId', { pinId })
+      .getOne();
+
+    if (!pin) {
+      throw new NotFoundException(`Pin with ID ${pinId} not found`);
+    }
+
+    const userId = pin.resource.collection.mural.userId;
+
     return await this.dataSource.transaction(async (manager) => {
-      const pinToUpdate = await manager
-        .createQueryBuilder(PinEntity, 'pin')
-        .leftJoinAndSelect('pin.variants', 'variants')
-        .where('pin.id = :pinId', { pinId })
-        .getOne();
+      if (updatePinDto.variants) {
+        const orders = updatePinDto.variants.map((v) => v.order);
+        const isValidOrder =
+          this.fractionalIndexingService.validateOrderSequence(orders);
 
-      if (!pinToUpdate) {
-        throw new NotFoundException(`Pin with ID ${pinId} not found`);
-      }
+        if (!isValidOrder) {
+          throw new BadRequestException('Invalid variant order sequence');
+        }
 
-      if (updatePinDto.variants && updatePinDto.variants.length > 0) {
-        for (const variantUpdate of updatePinDto.variants) {
-          const variantToUpdate = pinToUpdate.variants.find(
-            (variant) => variant.id === variantUpdate.id,
+        const existingVariants = pin.variants;
+        const incomingVariants = updatePinDto.variants;
+
+        const incomingIds = incomingVariants
+          .filter((v) => v.id)
+          .map((v) => v.id);
+
+        const variantsToDelete = existingVariants.filter(
+          (v) => !incomingIds.includes(v.id),
+        );
+        const variantsToAdd = incomingVariants.filter((v) => !v.id);
+        const variantsToUpdate = incomingVariants.filter((v) => v.id);
+
+        const finalCount =
+          existingVariants.length -
+          variantsToDelete.length +
+          variantsToAdd.length;
+
+        if (finalCount < 1) {
+          throw new BadRequestException('A pin must have at least one variant');
+        }
+
+        if (variantsToAdd.length > 0) {
+          await this.subscriptionsService.validateSubscriptionLimits(
+            userId,
+            'variants_per_pin',
+            finalCount,
           );
+        }
 
-          if (!variantToUpdate) {
-            throw new NotFoundException(
-              `Variant with ID ${variantUpdate.id} not found in pin ${pinId}`,
-            );
-          }
+        if (variantsToDelete.length > 0) {
+          await manager.delete(
+            VariantEntity,
+            variantsToDelete.map((v) => v.id),
+          );
+        }
 
-          if (variantUpdate.config !== undefined) {
-            variantToUpdate.config = variantUpdate.config;
-            await manager.save(variantToUpdate);
-          }
+        for (const variantUpdate of variantsToUpdate) {
+          await manager.update(VariantEntity, variantUpdate.id, {
+            config: variantUpdate.config,
+            order: variantUpdate.order,
+          });
+        }
+
+        for (const newVariant of variantsToAdd) {
+          const variant = manager.create(VariantEntity, {
+            pinId: pin.id,
+            config: newVariant.config,
+            order: newVariant.order,
+          });
+          await manager.save(variant);
         }
       }
 
@@ -284,5 +346,191 @@ export class PinsService {
     );
 
     return result.length > 0 ? parseInt(result[0].total) : 0;
+  }
+
+  async reorder(entityId: string, reorderDto: ReorderDto) {
+    return await this.dataSource.transaction(async (manager) => {
+      const { type, newOrder, previousId, nextId } = reorderDto;
+
+      if (!this.fractionalIndexingService.validateOrder(newOrder)) {
+        throw new NotFoundException(
+          'Invalid order value. Must be a valid fractional index.',
+        );
+      }
+
+      switch (type) {
+        case 'pin': {
+          const pin = await manager.findOne(PinEntity, {
+            where: { id: entityId },
+          });
+
+          if (!pin) {
+            throw new NotFoundException('Pin not found');
+          }
+
+          const collision = await manager.findOne(PinEntity, {
+            where: {
+              resourceId: pin.resourceId,
+              order: newOrder,
+            },
+          });
+
+          if (collision && collision.id !== entityId) {
+            throw new NotFoundException(
+              'Order collision detected. Another pin already has this order value.',
+            );
+          }
+
+          if (previousId || nextId) {
+            if (previousId) {
+              const previous = await manager.findOne(PinEntity, {
+                where: { id: previousId },
+              });
+
+              if (!previous) {
+                throw new NotFoundException('Previous pin not found');
+              }
+
+              if (previous.resourceId !== pin.resourceId) {
+                throw new NotFoundException(
+                  'Previous pin is not in the same resource',
+                );
+              }
+
+              if (
+                this.fractionalIndexingService.compareOrder(
+                  newOrder,
+                  previous.order,
+                ) <= 0
+              ) {
+                throw new NotFoundException(
+                  'New order must be greater than previous pin order',
+                );
+              }
+            }
+
+            if (nextId) {
+              const next = await manager.findOne(PinEntity, {
+                where: { id: nextId },
+              });
+
+              if (!next) {
+                throw new NotFoundException('Next pin not found');
+              }
+
+              if (next.resourceId !== pin.resourceId) {
+                throw new NotFoundException(
+                  'Next pin is not in the same resource',
+                );
+              }
+
+              if (
+                this.fractionalIndexingService.compareOrder(
+                  newOrder,
+                  next.order,
+                ) >= 0
+              ) {
+                throw new NotFoundException(
+                  'New order must be less than next pin order',
+                );
+              }
+            }
+          }
+
+          pin.order = newOrder;
+          await manager.save(pin);
+
+          return { message: 'Pin reordered successfully' };
+        }
+
+        case 'variant': {
+          const variant = await manager.findOne(VariantEntity, {
+            where: { id: entityId },
+          });
+
+          if (!variant) {
+            throw new NotFoundException('Variant not found');
+          }
+
+          const collision = await manager.findOne(VariantEntity, {
+            where: {
+              pinId: variant.pinId,
+              order: newOrder,
+            },
+          });
+
+          if (collision && collision.id !== entityId) {
+            throw new NotFoundException(
+              'Order collision detected. Another variant already has this order value.',
+            );
+          }
+
+          if (previousId || nextId) {
+            if (previousId) {
+              const previous = await manager.findOne(VariantEntity, {
+                where: { id: previousId },
+              });
+
+              if (!previous) {
+                throw new NotFoundException('Previous variant not found');
+              }
+
+              if (previous.pinId !== variant.pinId) {
+                throw new NotFoundException(
+                  'Previous variant is not in the same pin',
+                );
+              }
+
+              if (
+                this.fractionalIndexingService.compareOrder(
+                  newOrder,
+                  previous.order,
+                ) <= 0
+              ) {
+                throw new NotFoundException(
+                  'New order must be greater than previous variant order',
+                );
+              }
+            }
+
+            if (nextId) {
+              const next = await manager.findOne(VariantEntity, {
+                where: { id: nextId },
+              });
+
+              if (!next) {
+                throw new NotFoundException('Next variant not found');
+              }
+
+              if (next.pinId !== variant.pinId) {
+                throw new NotFoundException(
+                  'Next variant is not in the same pin',
+                );
+              }
+
+              if (
+                this.fractionalIndexingService.compareOrder(
+                  newOrder,
+                  next.order,
+                ) >= 0
+              ) {
+                throw new NotFoundException(
+                  'New order must be less than next variant order',
+                );
+              }
+            }
+          }
+
+          variant.order = newOrder;
+          await manager.save(variant);
+
+          return { message: 'Variant reordered successfully' };
+        }
+
+        default: {
+          throw new NotFoundException(`Invalid reorder type: ${type}`);
+        }
+      }
+    });
   }
 }

@@ -1,5 +1,4 @@
 import {
-  IsEnum,
   IsUUID,
   Matches,
   IsString,
@@ -9,11 +8,7 @@ import {
   IsOptional,
 } from 'class-validator';
 
-export class ReorderDto {
-  @IsEnum(['pin', 'variant'])
-  @IsNotEmpty()
-  type: 'pin' | 'variant';
-
+export class ReorderResourceDto {
   @IsString()
   @IsNotEmpty()
   @Matches(/^[0-9A-Za-z_-]+$/, {

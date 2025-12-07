@@ -14,7 +14,7 @@ import { FractionalIndexingService } from 'src/common/services/fractional-indexi
 import { PaginationQueryDto } from 'src/common/dto/pagination/pagination-query.dto';
 import { PaginatedResourcesResponseDto } from './dto/paginated-resources-response.dto';
 import { UpdatePinDto } from 'src/pins/dto/update-pin.dto';
-import { ReorderDto } from 'src/pins/dto/reorder.dto';
+import { ReorderResourceDto } from './dto/reorder-resource.dto';
 import { CreatePinResourceDto } from './dto/create-pin-resource.dto';
 import { SharePinResourceDto } from './dto/share-pin-resource.dto';
 import { CreatePinGroupResourceDto } from './dto/create-pin-group-resource.dto';
@@ -1064,9 +1064,9 @@ export class ResourcesService {
     return await this.pinsService.update(pinToUpdate.id, updatePinDto);
   }
 
-  async reorder(entityId: string, reorderDto: ReorderDto) {
+  async reorder(entityId: string, reorderDto: ReorderResourceDto) {
     return await this.dataSource.transaction(async (manager) => {
-      const { type, newOrder, previousId, nextId } = reorderDto;
+      const { newOrder, previousId, nextId } = reorderDto;
 
       if (!this.fractionalIndexingService.validateOrder(newOrder)) {
         throw new NotFoundException(
@@ -1074,263 +1074,85 @@ export class ResourcesService {
         );
       }
 
-      switch (type) {
-        case 'resource': {
-          const resource = await manager.findOne(ResourceEntity, {
-            where: { id: entityId },
+      const resource = await manager.findOne(ResourceEntity, {
+        where: { id: entityId },
+      });
+
+      if (!resource) {
+        throw new NotFoundException('Resource not found');
+      }
+
+      const collision = await manager.findOne(ResourceEntity, {
+        where: {
+          collectionId: resource.collectionId,
+          order: newOrder,
+        },
+      });
+
+      if (collision && collision.id !== entityId) {
+        throw new NotFoundException(
+          'Order collision detected. Another resource already has this order value.',
+        );
+      }
+
+      if (previousId || nextId) {
+        if (previousId) {
+          const previous = await manager.findOne(ResourceEntity, {
+            where: { id: previousId },
           });
 
-          if (!resource) {
-            throw new NotFoundException('Resource not found');
+          if (!previous) {
+            throw new NotFoundException('Previous resource not found');
           }
 
-          const collision = await manager.findOne(ResourceEntity, {
-            where: {
-              collectionId: resource.collectionId,
-              order: newOrder,
-            },
-          });
-
-          if (collision && collision.id !== entityId) {
+          if (previous.collectionId !== resource.collectionId) {
             throw new NotFoundException(
-              'Order collision detected. Another resource already has this order value.',
+              'Previous resource is not in the same collection',
             );
           }
 
-          if (previousId || nextId) {
-            if (previousId) {
-              const previous = await manager.findOne(ResourceEntity, {
-                where: { id: previousId },
-              });
-
-              if (!previous) {
-                throw new NotFoundException('Previous resource not found');
-              }
-
-              if (previous.collectionId !== resource.collectionId) {
-                throw new NotFoundException(
-                  'Previous resource is not in the same collection',
-                );
-              }
-
-              if (
-                this.fractionalIndexingService.compareOrder(
-                  newOrder,
-                  previous.order,
-                ) <= 0
-              ) {
-                throw new NotFoundException(
-                  'New order must be greater than previous resource order',
-                );
-              }
-            }
-
-            if (nextId) {
-              const next = await manager.findOne(ResourceEntity, {
-                where: { id: nextId },
-              });
-
-              if (!next) {
-                throw new NotFoundException('Next resource not found');
-              }
-
-              if (next.collectionId !== resource.collectionId) {
-                throw new NotFoundException(
-                  'Next resource is not in the same collection',
-                );
-              }
-
-              if (
-                this.fractionalIndexingService.compareOrder(
-                  newOrder,
-                  next.order,
-                ) >= 0
-              ) {
-                throw new NotFoundException(
-                  'New order must be less than next resource order',
-                );
-              }
-            }
+          if (
+            this.fractionalIndexingService.compareOrder(
+              newOrder,
+              previous.order,
+            ) <= 0
+          ) {
+            throw new NotFoundException(
+              'New order must be greater than previous resource order',
+            );
           }
-
-          resource.order = newOrder;
-          await manager.save(resource);
-
-          return { message: 'Resource reordered successfully' };
         }
 
-        case 'pin': {
-          const pin = await manager.findOne(PinEntity, {
-            where: { id: entityId },
+        if (nextId) {
+          const next = await manager.findOne(ResourceEntity, {
+            where: { id: nextId },
           });
 
-          if (!pin) {
-            throw new NotFoundException('Pin not found');
+          if (!next) {
+            throw new NotFoundException('Next resource not found');
           }
 
-          const collision = await manager.findOne(PinEntity, {
-            where: {
-              resourceId: pin.resourceId,
-              order: newOrder,
-            },
-          });
-
-          if (collision && collision.id !== entityId) {
+          if (next.collectionId !== resource.collectionId) {
             throw new NotFoundException(
-              'Order collision detected. Another pin already has this order value.',
+              'Next resource is not in the same collection',
             );
           }
 
-          if (previousId || nextId) {
-            if (previousId) {
-              const previous = await manager.findOne(PinEntity, {
-                where: { id: previousId },
-              });
-
-              if (!previous) {
-                throw new NotFoundException('Previous pin not found');
-              }
-
-              if (previous.resourceId !== pin.resourceId) {
-                throw new NotFoundException(
-                  'Previous pin is not in the same resource',
-                );
-              }
-
-              if (
-                this.fractionalIndexingService.compareOrder(
-                  newOrder,
-                  previous.order,
-                ) <= 0
-              ) {
-                throw new NotFoundException(
-                  'New order must be greater than previous pin order',
-                );
-              }
-            }
-
-            if (nextId) {
-              const next = await manager.findOne(PinEntity, {
-                where: { id: nextId },
-              });
-
-              if (!next) {
-                throw new NotFoundException('Next pin not found');
-              }
-
-              if (next.resourceId !== pin.resourceId) {
-                throw new NotFoundException(
-                  'Next pin is not in the same resource',
-                );
-              }
-
-              if (
-                this.fractionalIndexingService.compareOrder(
-                  newOrder,
-                  next.order,
-                ) >= 0
-              ) {
-                throw new NotFoundException(
-                  'New order must be less than next pin order',
-                );
-              }
-            }
-          }
-
-          pin.order = newOrder;
-          await manager.save(pin);
-
-          return { message: 'Pin reordered successfully' };
-        }
-
-        case 'variant': {
-          const variant = await manager.findOne(VariantEntity, {
-            where: { id: entityId },
-          });
-
-          if (!variant) {
-            throw new NotFoundException('Variant not found');
-          }
-
-          const collision = await manager.findOne(VariantEntity, {
-            where: {
-              pinId: variant.pinId,
-              order: newOrder,
-            },
-          });
-
-          if (collision && collision.id !== entityId) {
+          if (
+            this.fractionalIndexingService.compareOrder(newOrder, next.order) >=
+            0
+          ) {
             throw new NotFoundException(
-              'Order collision detected. Another variant already has this order value.',
+              'New order must be less than next resource order',
             );
           }
-
-          if (previousId || nextId) {
-            if (previousId) {
-              const previous = await manager.findOne(VariantEntity, {
-                where: { id: previousId },
-              });
-
-              if (!previous) {
-                throw new NotFoundException('Previous variant not found');
-              }
-
-              if (previous.pinId !== variant.pinId) {
-                throw new NotFoundException(
-                  'Previous variant is not in the same pin',
-                );
-              }
-
-              if (
-                this.fractionalIndexingService.compareOrder(
-                  newOrder,
-                  previous.order,
-                ) <= 0
-              ) {
-                throw new NotFoundException(
-                  'New order must be greater than previous variant order',
-                );
-              }
-            }
-
-            if (nextId) {
-              const next = await manager.findOne(VariantEntity, {
-                where: { id: nextId },
-              });
-
-              if (!next) {
-                throw new NotFoundException('Next variant not found');
-              }
-
-              if (next.pinId !== variant.pinId) {
-                throw new NotFoundException(
-                  'Next variant is not in the same pin',
-                );
-              }
-
-              if (
-                this.fractionalIndexingService.compareOrder(
-                  newOrder,
-                  next.order,
-                ) >= 0
-              ) {
-                throw new NotFoundException(
-                  'New order must be less than next variant order',
-                );
-              }
-            }
-          }
-
-          variant.order = newOrder;
-          await manager.save(variant);
-
-          return { message: 'Variant reordered successfully' };
-        }
-
-        default: {
-          throw new NotFoundException(`Invalid reorder type: ${type}`);
         }
       }
+
+      resource.order = newOrder;
+      await manager.save(resource);
+
+      return { message: 'Resource reordered successfully' };
     });
   }
 
