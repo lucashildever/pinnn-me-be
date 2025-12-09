@@ -6,15 +6,12 @@ import {
   ManyToOne,
   OneToMany,
   JoinColumn,
-  DeleteDateColumn,
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { TimestampEntity } from 'src/common/entities/timestamp.entity';
 import { CollectionEntity } from 'src/collections/entities/collection.entity';
 import { PinEntity } from 'src/pins/entities/pin.entity';
 
-import { STATUSES } from 'src/common/constants/statuses.constant';
-import { Status } from 'src/common/types/status.type';
 import { ResourceMetaEntity } from './resource-meta.entity';
 
 @Entity('resources')
@@ -45,18 +42,8 @@ export class ResourceEntity extends TimestampEntity {
   })
   order: string;
 
-  @Column({
-    type: 'enum',
-    enum: STATUSES,
-    default: 'active',
-  })
-  status: Status;
-
   @OneToMany(() => PinEntity, (pin) => pin.resource, {
     cascade: ['insert', 'update'],
   })
   pins: PinEntity[];
-
-  @DeleteDateColumn({ type: 'timestamp', nullable: true })
-  deletedAt: Date;
 }

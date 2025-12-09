@@ -23,6 +23,32 @@ export class FractionalIndexingService {
     return this.generateKeyBetweenStrings(a, b);
   }
 
+  /**
+   * Generates multiple keys evenly spaced between two bounds
+   * @param a Lower bound (or null for start)
+   * @param b Upper bound (or null for end)
+   * @param count Number of keys to generate
+   * @returns Array of keys ordered from a to b
+   */
+  generateKeysBetween(
+    a: string | null | undefined,
+    b: string | null | undefined,
+    count: number,
+  ): string[] {
+    if (count <= 0) return [];
+    if (count === 1) return [this.generateKeyBetween(a, b)];
+
+    const keys: string[] = [];
+    let prev = a;
+    for (let i = 0; i < count; i++) {
+      const next = i === count - 1 ? b : null;
+      const key = this.generateKeyBetween(prev, next);
+      keys.push(key);
+      prev = key;
+    }
+    return keys;
+  }
+
   private generateKeyBefore(key: string): string {
     if (key.length === 0) return 'a0';
 

@@ -152,7 +152,7 @@ export class PinsService {
       .getRepository(PinEntity)
       .findAndCount({
         where: { resourceId },
-        order: { order: 'ASC' },
+        order: { order: 'DESC' },
         skip,
         take: limit,
         relations: ['variants', 'pinMeta'],

@@ -48,6 +48,8 @@ describe('ResourcesService', () => {
     validateOrderSequence: jest.fn(),
     generateKeyBetween: jest.fn(),
     validateOrder: jest.fn(),
+    generateKeysBetween: jest.fn(),
+    compareOrder: jest.fn(),
   };
   const mockDataSource = {
     transaction: jest.fn((cb) => cb({} as any)),
@@ -541,6 +543,120 @@ describe('ResourcesService', () => {
       expect(
         result.pins.data[0].fromShared?.variants.pagination.totalItems,
       ).toBe(10);
+    });
+  });
+
+  describe('ungroup', () => {
+    it('should correctly ungroup pins and update references (Manual Verification Case)', async () => {
+      const resourceId = 'group-resource-id';
+      const collectionId = 'collection-1';
+
+      const mockGroupResource = {
+        id: resourceId,
+        collectionId,
+        order: 'a1',
+        status: 'active',
+        resourceMeta: {
+          sharedResourceId: null,
+          ungroupedPins: null,
+        },
+        pins: [
+          {
+            id: 'pin-1',
+            order: 'a0',
+            variants: [],
+            pinMeta: null,
+            // Simulate loaded relation pointing to the group resource
+            resource: { id: resourceId },
+          },
+          {
+            id: 'pin-2',
+            order: 'a1',
+            variants: [],
+            pinMeta: null,
+            resource: { id: resourceId },
+          },
+        ],
+      } as any;
+
+      const mockPrevResource = { order: 'a0' };
+      const mockNextResource = { order: 'a2' };
+
+      const mockManager = {
+        findOne: jest.fn().mockResolvedValue(mockGroupResource),
+        create: jest.fn().mockImplementation((entity, dto) => dto || entity),
+        save: jest.fn().mockImplementation((entity) => {
+          // Simulate generating an ID for new resources
+          if (!entity.id && entity instanceof ResourceEntity) {
+            return Promise.resolve({
+              ...entity,
+              id: 'new-res-' + Math.random(),
+            });
+          }
+          return Promise.resolve(entity);
+        }),
+        createQueryBuilder: jest.fn(() => ({
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          orderBy: jest.fn().mockReturnThis(),
+          getOne: jest
+            .fn()
+            .mockResolvedValueOnce(mockPrevResource) // prev
+            .mockResolvedValueOnce(mockNextResource), // next
+        })),
+      };
+
+      mockDataSource.transaction.mockImplementation((cb) => cb(mockManager));
+      mockFractionalIndexingService.generateKeysBetween.mockReturnValue([
+        'a0.1',
+        'a0.2',
+      ]);
+      mockFractionalIndexingService['compareOrder'] = jest.fn((a, b) =>
+        a.localeCompare(b),
+      );
+
+      await service.ungroupPinResources(resourceId);
+
+      // Verify that pins are saved with the NEW resource object reference
+      // This is the critical fix: ensuring pin.resource is updated, not just pin.resourceId
+      const savedPin1Calls = mockManager.save.mock.calls.filter(
+        (call) => call[0].id === 'pin-1',
+      );
+      const savedPin2Calls = mockManager.save.mock.calls.filter(
+        (call) => call[0].id === 'pin-2',
+      );
+
+      expect(savedPin1Calls.length).toBeGreaterThan(0);
+      expect(savedPin2Calls.length).toBeGreaterThan(0);
+
+      const lastSavePin1 = savedPin1Calls[savedPin1Calls.length - 1][0];
+      const lastSavePin2 = savedPin2Calls[savedPin2Calls.length - 1][0];
+
+      // pinned resource object should be a NEW resource entity (instance matching create call)
+      // Since we mock create to return the DTO/Entity, and save returns it with ID,
+      // we check if resource property is set and distinct from the old group ID
+      expect(lastSavePin1.resource).toBeDefined();
+      expect(lastSavePin1.resource.id).not.toBe(resourceId);
+      expect(lastSavePin1.resourceId).toBe(lastSavePin1.resource.id);
+
+      expect(lastSavePin2.resource).toBeDefined();
+      expect(lastSavePin2.resource.id).not.toBe(resourceId);
+      expect(lastSavePin2.resourceId).toBe(lastSavePin2.resource.id);
+
+      // Verify ungroupedPins metadata update
+      const savedMetaCall = mockManager.save.mock.calls.find(
+        (call) => call[0] === mockGroupResource.resourceMeta,
+      );
+      expect(savedMetaCall).toBeDefined();
+      expect(savedMetaCall[0].ungroupedPins).toEqual(['pin-1', 'pin-2']);
+
+      // Verify soft delete of group resource
+      const savedResourceCall = mockManager.save.mock.calls.find(
+        (call) => call[0] === mockGroupResource,
+      );
+      expect(savedResourceCall).toBeDefined();
+      expect(savedResourceCall[0].status).toBe('deleted');
+      expect(savedResourceCall[0].deletedAt).toBeDefined();
     });
   });
 });

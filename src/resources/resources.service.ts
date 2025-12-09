@@ -13,12 +13,12 @@ import { CollectionEntity } from 'src/collections/entities/collection.entity';
 import { FractionalIndexingService } from 'src/common/services/fractional-indexing.service';
 import { PaginationQueryDto } from 'src/common/dto/pagination/pagination-query.dto';
 import { PaginatedResourcesResponseDto } from './dto/paginated-resources-response.dto';
-import { UpdatePinDto } from 'src/pins/dto/update-pin.dto';
 import { ReorderResourceDto } from './dto/reorder-resource.dto';
 import { CreatePinResourceDto } from './dto/create-pin-resource.dto';
 import { SharePinResourceDto } from './dto/share-pin-resource.dto';
 import { CreatePinGroupResourceDto } from './dto/create-pin-group-resource.dto';
 import { SharePinGroupResourceDto } from './dto/share-pin-group-resource.dto';
+import { GroupPinsDto } from './dto/group-pins.dto';
 import { PinEntity } from 'src/pins/entities/pin.entity';
 import { PinMetaEntity } from 'src/pins/entities/pin-meta.entity';
 import { VariantEntity } from 'src/pins/entities/variant.entity';
@@ -53,8 +53,7 @@ export class ResourcesService {
       .createQueryBuilder('resource')
       .leftJoinAndSelect('resource.resourceMeta', 'resourceMeta')
       .where('resource.collectionId = :collectionId', { collectionId })
-      .andWhere('resource.status = :status', { status: 'active' })
-      .orderBy('resource.order', 'ASC')
+      .orderBy('resource.order', 'DESC')
       .skip(skip)
       .take(limit);
 
@@ -110,7 +109,7 @@ export class ResourcesService {
       .createQueryBuilder('resource')
       .leftJoinAndSelect('resource.resourceMeta', 'resourceMeta')
       .where('resource.id = :resourceId', { resourceId })
-      .andWhere('resource.status = :status', { status: 'active' })
+
       .getOne();
 
     if (!resource) throw new NotFoundException('Resource not found');
@@ -224,6 +223,9 @@ export class ResourcesService {
     });
   }
 
+  /*
+   * Creates new Pins/SharedPins grouped into a single resource.
+   */
   async createPinGroupResource(
     collectionId: string,
     createPinGroupResourceDto: CreatePinGroupResourceDto,
@@ -1037,31 +1039,16 @@ export class ResourcesService {
     });
   }
 
-  async softDelete(resourceId: string) {
+  async delete(resourceId: string) {
     const resource = await this.resourcesRepository.findOne({
       where: { id: resourceId },
     });
 
     if (!resource) throw new NotFoundException('Resource not found');
 
-    resource.status = 'deleted';
-    await this.resourcesRepository.softRemove(resource);
+    await this.resourcesRepository.remove(resource);
 
     return { message: `Resource ${resourceId} successfully deleted` };
-  }
-
-  async updatePinResource(resourceId: string, updatePinDto: UpdatePinDto) {
-    const resource = await this.resourcesRepository.findOne({
-      where: { id: resourceId },
-      relations: ['pins'],
-    });
-
-    if (!resource || !resource.pins || resource.pins.length === 0) {
-      throw new NotFoundException('Pin Resource not found');
-    }
-
-    const pinToUpdate = resource.pins[0];
-    return await this.pinsService.update(pinToUpdate.id, updatePinDto);
   }
 
   async reorder(entityId: string, reorderDto: ReorderResourceDto) {
@@ -1153,6 +1140,310 @@ export class ResourcesService {
       await manager.save(resource);
 
       return { message: 'Resource reordered successfully' };
+    });
+  }
+
+  /*
+   * Creates a pinGroup from existing pins/sharedPins.
+   */
+  async groupPinResources(
+    collectionId: string,
+    groupPinsDto: GroupPinsDto,
+  ): Promise<ResourceDto> {
+    return await this.dataSource.transaction(async (manager) => {
+      const collection = await manager.findOne(CollectionEntity, {
+        where: { id: collectionId },
+        relations: ['mural'],
+      });
+
+      if (!collection) throw new NotFoundException('Collection not found');
+
+      const resources = await Promise.all(
+        groupPinsDto.resourceIds.map(async (resourceId) => {
+          const resource = await manager.findOne(ResourceEntity, {
+            where: { id: resourceId },
+            relations: [
+              'pins',
+              'pins.pinMeta',
+              'pins.variants',
+              'resourceMeta',
+            ],
+          });
+          return resource;
+        }),
+      );
+
+      for (let i = 0; i < resources.length; i++) {
+        const resource = resources[i];
+        if (!resource) {
+          throw new NotFoundException(
+            `Resource ${groupPinsDto.resourceIds[i]} not found`,
+          );
+        }
+
+        if (resource.collectionId !== collectionId) {
+          throw new NotFoundException(
+            `Resource ${resource.id} does not belong to this collection`,
+          );
+        }
+        // Validate it's a single-pin resource (not a group) - PinResources don't have resourceMeta
+        if (resource.resourceMeta) {
+          throw new NotFoundException(
+            `Resource ${resource.id} is already a group and cannot be grouped`,
+          );
+        }
+        if (!resource.pins || resource.pins.length !== 1) {
+          throw new NotFoundException(
+            `Resource ${resource.id} must have exactly one pin to be grouped`,
+          );
+        }
+      }
+
+      await this.subscriptionsService.validateSubscriptionLimits(
+        collection.mural.userId,
+        'pins_per_group',
+        resources.length,
+      );
+
+      const sortedResources = [...resources].sort((a, b) =>
+        this.fractionalIndexingService.compareOrder(a!.order, b!.order),
+      );
+      const minOrder = sortedResources[0]!.order;
+
+      const resourceMeta = manager.create(ResourceMetaEntity, {
+        groupName: groupPinsDto.groupName || null,
+      });
+
+      const newResource = manager.create(ResourceEntity, {
+        collectionId,
+        order: minOrder,
+        resourceMeta,
+      });
+      const savedResource = await manager.save(newResource);
+
+      savedResource.resourceMeta.firstResourceId = savedResource.id;
+      await manager.save(savedResource.resourceMeta);
+
+      // Update all pins to reference the new resource and assign orders
+      const createdPins: PinEntity[] = [];
+      for (let i = 0; i < sortedResources.length; i++) {
+        const resource = sortedResources[i]!;
+        const pin = resource.pins[0];
+
+        const pinOrder = this.fractionalIndexingService.generateKeyBetween(
+          i > 0 ? createdPins[i - 1].order : null,
+          null,
+        );
+
+        pin.resourceId = savedResource.id;
+        pin.resource = savedResource;
+        pin.order = pinOrder;
+        await manager.save(pin);
+        createdPins.push(pin);
+
+        await manager.remove(resource);
+      }
+
+      const pinsWithFromShared = await Promise.all(
+        createdPins.slice(0, DEFAULT_ITEMS_LIMIT).map(async (pin) => {
+          const isSharedPin = pin.pinMeta?.sharedPinId;
+
+          if (isSharedPin) {
+            const ownVariantsCount = pin.variants?.length || 0;
+            let fromSharedData:
+              | {
+                  variants: {
+                    data: { id: string; order: string; config: any }[];
+                    pagination: {
+                      currentPage: number;
+                      totalItems: number;
+                      itemsPerPage: number;
+                    };
+                  };
+                }
+              | undefined = undefined;
+
+            if (ownVariantsCount < DEFAULT_ITEMS_LIMIT) {
+              const remainingToFetch = DEFAULT_ITEMS_LIMIT - ownVariantsCount;
+              const sharedVariantsResult = await this.pinsService.findVariants(
+                pin.pinMeta.sharedPinId,
+                { page: 1, limit: remainingToFetch },
+              );
+
+              fromSharedData = {
+                variants: {
+                  data: sharedVariantsResult.variants,
+                  pagination: sharedVariantsResult.pagination,
+                },
+              };
+            }
+
+            return this.mapPinToDto(pin, { fromShared: fromSharedData });
+          }
+
+          return this.mapPinToDto(pin);
+        }),
+      );
+
+      return {
+        id: savedResource.id,
+        order: savedResource.order,
+        type: 'pin-group',
+        pins: {
+          data: pinsWithFromShared,
+          pagination: {
+            currentPage: 1,
+            totalItems: createdPins.length,
+            itemsPerPage: DEFAULT_ITEMS_LIMIT,
+          },
+        },
+        meta: {
+          groupName: savedResource.resourceMeta.groupName,
+          firstResourceId: savedResource.resourceMeta.firstResourceId,
+          history: savedResource.resourceMeta.history,
+          sharedResourceId: savedResource.resourceMeta.sharedResourceId,
+        },
+      };
+    });
+  }
+
+  async ungroupPinResources(resourceId: string): Promise<ResourceDto[]> {
+    return await this.dataSource.transaction(async (manager) => {
+      const resource = await manager.findOne(ResourceEntity, {
+        where: { id: resourceId },
+        relations: [
+          'resourceMeta',
+          'pins',
+          'pins.pinMeta',
+          'pins.variants',
+          'collection',
+          'collection.mural',
+        ],
+      });
+
+      if (!resource) {
+        throw new NotFoundException('Resource not found');
+      }
+
+      if (!resource.resourceMeta) {
+        throw new NotFoundException(
+          'Resource is not a group and cannot be ungrouped',
+        );
+      }
+
+      const isSharedPinGroup = !!resource.resourceMeta.sharedResourceId;
+      const pinsToUngroup = resource.pins || [];
+
+      if (isSharedPinGroup && pinsToUngroup.length === 0) {
+        await manager.remove(resource);
+        return [];
+      }
+
+      if (!isSharedPinGroup && pinsToUngroup.length === 0) {
+        await manager.remove(resource);
+        return [];
+      }
+
+      const sortedPins = [...pinsToUngroup].sort((a, b) =>
+        this.fractionalIndexingService.compareOrder(
+          a.order || 'a0',
+          b.order || 'a0',
+        ),
+      );
+
+      const prevResource = await manager
+        .createQueryBuilder(ResourceEntity, 'resource')
+        .where('resource.collectionId = :collectionId', {
+          collectionId: resource.collectionId,
+        })
+
+        .andWhere('resource.order < :order', { order: resource.order })
+        .orderBy('resource.order', 'DESC')
+        .getOne();
+
+      const nextResource = await manager
+        .createQueryBuilder(ResourceEntity, 'resource')
+        .where('resource.collectionId = :collectionId', {
+          collectionId: resource.collectionId,
+        })
+        .andWhere('resource.order > :order', { order: resource.order })
+        .orderBy('resource.order', 'ASC')
+        .getOne();
+
+      // Generate evenly-spaced orders for new resources
+      const newOrders = this.fractionalIndexingService.generateKeysBetween(
+        prevResource?.order || null,
+        nextResource?.order || null,
+        sortedPins.length,
+      );
+
+      const createdResources: ResourceDto[] = [];
+
+      for (let i = 0; i < sortedPins.length; i++) {
+        const pin = sortedPins[i];
+        const isSharedPin = !!pin.pinMeta?.sharedPinId;
+
+        const newResource = manager.create(ResourceEntity, {
+          collectionId: resource.collectionId,
+          order: newOrders[i],
+        });
+        const savedResource = await manager.save(newResource);
+
+        // Update pin to reference new resource
+        pin.resourceId = savedResource.id;
+        pin.resource = savedResource;
+        (pin as any).order = null; // Single-pin resources don't need pin order
+        await manager.save(pin);
+
+        let fromSharedData:
+          | {
+              variants: {
+                data: { id: string; order: string; config: any }[];
+                pagination: {
+                  currentPage: number;
+                  totalItems: number;
+                  itemsPerPage: number;
+                };
+              };
+            }
+          | undefined = undefined;
+
+        if (isSharedPin) {
+          const ownVariantsCount = pin.variants?.length || 0;
+          if (ownVariantsCount < DEFAULT_ITEMS_LIMIT) {
+            const remainingToFetch = DEFAULT_ITEMS_LIMIT - ownVariantsCount;
+            const sharedVariantsResult = await this.pinsService.findVariants(
+              pin.pinMeta!.sharedPinId!,
+              { page: 1, limit: remainingToFetch },
+            );
+
+            fromSharedData = {
+              variants: {
+                data: sharedVariantsResult.variants,
+                pagination: sharedVariantsResult.pagination,
+              },
+            };
+          }
+        }
+
+        createdResources.push({
+          id: savedResource.id,
+          order: savedResource.order,
+          type: isSharedPin ? 'shared-pin' : 'pin',
+          pins: {
+            data: [this.mapPinToDto(pin, { fromShared: fromSharedData })],
+            pagination: {
+              currentPage: 1,
+              totalItems: 1,
+              itemsPerPage: DEFAULT_ITEMS_LIMIT,
+            },
+          },
+        });
+      }
+
+      await manager.remove(resource);
+
+      return createdResources;
     });
   }
 

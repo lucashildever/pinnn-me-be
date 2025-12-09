@@ -20,6 +20,7 @@ import { CreatePinResourceDto } from './dto/create-pin-resource.dto';
 import { SharePinResourceDto } from './dto/share-pin-resource.dto';
 import { CreatePinGroupResourceDto } from './dto/create-pin-group-resource.dto';
 import { SharePinGroupResourceDto } from './dto/share-pin-group-resource.dto';
+import { GroupPinsDto } from './dto/group-pins.dto';
 import { ResourceDto } from './dto/resource.dto';
 import { PaginatedResourcesResponseDto } from './dto/paginated-resources-response.dto';
 
@@ -95,16 +96,7 @@ export class ResourcesController {
   async deleteResource(
     @Param('resourceId', new ParseUUIDPipe()) resourceId: string,
   ) {
-    return this.resourcesService.softDelete(resourceId);
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Patch('update/pin/:resourceId')
-  async updatePinResource(
-    @Param('resourceId', new ParseUUIDPipe()) resourceId: string,
-    @Body() updatePinDto: UpdatePinDto,
-  ) {
-    return this.resourcesService.updatePinResource(resourceId, updatePinDto);
+    return this.resourcesService.delete(resourceId);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -115,5 +107,22 @@ export class ResourcesController {
     @Body() reorderDto: ReorderResourceDto,
   ) {
     return this.resourcesService.reorder(resourceId, reorderDto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('group/:collectionId')
+  async group(
+    @Param('collectionId', new ParseUUIDPipe()) collectionId: string,
+    @Body() groupPinsDto: GroupPinsDto,
+  ): Promise<ResourceDto> {
+    return this.resourcesService.groupPinResources(collectionId, groupPinsDto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('ungroup/:resourceId')
+  async ungroup(
+    @Param('resourceId', new ParseUUIDPipe()) resourceId: string,
+  ): Promise<ResourceDto[]> {
+    return this.resourcesService.ungroupPinResources(resourceId);
   }
 }
