@@ -1,13 +1,6 @@
-import {
-  Column,
-  Entity,
-  OneToOne,
-  ManyToOne,
-  PrimaryGeneratedColumn,
-} from 'typeorm';
+import { Column, Entity, OneToOne, PrimaryGeneratedColumn } from 'typeorm';
 
 import { TimestampEntity } from 'src/common/entities/timestamp.entity';
-import { Invoice } from 'src/billings/entities/invoice.entity';
 import { Payment } from './payment.entity';
 
 import { PAYMENT_ATTEMPT_STATUSES } from '../constants/payment-attempt-status.constant';
@@ -15,16 +8,11 @@ import { PaymentAttemptStatus } from '../types/payment-attempt-status.type';
 
 @Entity('payment_attempts')
 export class PaymentAttempt extends TimestampEntity {
-  // avaliar adicionar coluna "failure_reason"
-
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
   @Column({ nullable: true, unique: true })
   stripeSessionId?: string;
-
-  @Column({ nullable: true, unique: true })
-  stripePaymentIntentId?: string;
 
   @Column('decimal', { precision: 10, scale: 2, nullable: true })
   amount?: number;
@@ -38,12 +26,6 @@ export class PaymentAttempt extends TimestampEntity {
     default: 'pending',
   })
   status: PaymentAttemptStatus;
-
-  @ManyToOne(() => Invoice, (invoice) => invoice.paymentAttempts, {
-    nullable: true,
-    onDelete: 'RESTRICT',
-  })
-  invoice?: Invoice;
 
   @OneToOne(() => Payment, (payment) => payment.originAttempt, {
     nullable: true,

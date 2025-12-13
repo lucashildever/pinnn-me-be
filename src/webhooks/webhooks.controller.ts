@@ -25,10 +25,12 @@ export class WebhooksController {
     }
 
     try {
-      await this.webhooksService.handleStripeWebhook(
-        req.rawBody || Buffer.from(JSON.stringify(body)),
-        signature,
-      );
+      if (!req.rawBody) {
+        console.error('Raw body is missing on the request object.');
+        throw new BadRequestException('Raw body is missing');
+      }
+
+      await this.webhooksService.handleStripeWebhook(req.rawBody, signature);
 
       return { received: true };
     } catch (error) {

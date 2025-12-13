@@ -30,12 +30,18 @@ export class DatabaseService {
 
       // Clear tables (order matters due to foreign keys)
       // Start with most dependent tables first
+      await this.usersRepository.query('TRUNCATE TABLE payments');
+      await this.usersRepository.query('TRUNCATE TABLE payment_attempts');
+      await this.usersRepository.query('TRUNCATE TABLE invoices');
+      await this.usersRepository.query('TRUNCATE TABLE billing_info');
+      await this.usersRepository.query('TRUNCATE TABLE call_to_actions');
       await this.usersRepository.query('TRUNCATE TABLE variants');
       await this.usersRepository.query('TRUNCATE TABLE pins');
       await this.usersRepository.query('TRUNCATE TABLE pin_meta');
       await this.usersRepository.query('TRUNCATE TABLE resources');
       await this.usersRepository.query('TRUNCATE TABLE resource_meta');
       await this.usersRepository.query('TRUNCATE TABLE collections');
+      await this.usersRepository.query('TRUNCATE TABLE display_elements');
       await this.usersRepository.query('TRUNCATE TABLE murals');
       await this.usersRepository.query('TRUNCATE TABLE subscriptions');
       await this.usersRepository.query('TRUNCATE TABLE users');

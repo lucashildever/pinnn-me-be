@@ -25,4 +25,8 @@ export class UpdateInvoiceDto {
   @IsDateString()
   @Type(() => Date)
   processedAt?: Date;
+
+  @IsOptional()
+  @IsString()
+  subscriptionId?: string;
 }

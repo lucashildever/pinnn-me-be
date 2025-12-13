@@ -8,7 +8,6 @@ import {
 } from 'typeorm';
 
 import { TimestampEntity } from 'src/common/entities/timestamp.entity';
-import { PaymentAttempt } from 'src/payments/entities/payment-attempt.entity';
 import { Subscription } from 'src/subscriptions/entities/subscription.entity';
 import { BillingInfo } from './billing-info.entity';
 import { UserEntity } from 'src/users/entities/user.entity';
@@ -27,27 +26,24 @@ export class Invoice extends TimestampEntity {
   id: string;
 
   @ManyToOne(() => UserEntity, (user) => user.invoices, { nullable: false })
-  @JoinColumn({ name: 'userId' })
+  @JoinColumn()
   user: UserEntity;
 
   @Column()
   userId: string;
 
-  @OneToMany(() => PaymentAttempt, (attempt) => attempt.invoice)
-  paymentAttempts?: PaymentAttempt[];
-
   @OneToMany(() => Payment, (payment) => payment.invoice)
   payments?: Payment[];
 
   @ManyToOne(() => BillingInfo, (billingInfo) => billingInfo.invoices)
-  @JoinColumn({ name: 'billingInfoId' })
+  @JoinColumn()
   billingInfo?: BillingInfo;
 
   @Column()
   billingInfoId: string;
 
   @ManyToOne(() => Subscription, { eager: false })
-  @JoinColumn({ name: 'subscriptionId' })
+  @JoinColumn()
   subscription?: Subscription;
 
   @Column({ nullable: true })
@@ -77,19 +73,6 @@ export class Invoice extends TimestampEntity {
 
   @Column({ nullable: true })
   stripeInvoiceId?: string;
-
-  @Column({ nullable: true })
-  planName?: string; // Plan name in the moment of registration (ex: PlanType may change in the future)
-
-  @Column({
-    type: 'enum',
-    enum: PLAN_TYPES,
-    nullable: true,
-  })
-  planType?: PlanType;
-
-  @Column({ nullable: true })
-  description?: string;
 
   @Column({ type: 'timestamp', nullable: true })
   processedAt?: Date;

@@ -19,7 +19,8 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "seed": "ts-node -r tsconfig-paths/register src/database/commands/seed-cli.ts seed",
-    "seed:fresh": "ts-node -r tsconfig-paths/register src/database/commands/seed-cli.ts seed --clear-and-seed"
+    "seed:fresh": "ts-node -r tsconfig-paths/register src/database/commands/seed-cli.ts seed --clear-and-seed",
+    "stripe:webhooks": "stripe listen --forward-to http://localhost:4000/webhooks/stripe"
   },
   "dependencies": {
     "@nestjs/cache-manager": "^3.0.1",
@@ -60,6 +61,7 @@
     "@swc/cli": "^0.6.0",
     "@swc/core": "^1.10.7",
     "@types/bcrypt": "^5.0.2",
+    "@types/body-parser": "^1.19.6",
     "@types/cache-manager-redis-store": "^2.0.4",
     "@types/express": "^5.0.0",
     "@types/jest": "^29.5.14",

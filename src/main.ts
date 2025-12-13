@@ -6,9 +6,21 @@ import { ResponseInterceptor } from './common/interceptors/response.interceptor'
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { json, urlencoded } from 'express';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    bodyParser: false,
+  });
+
+  const rawBodyBuffer = (req: any, res: any, buf: any, encoding: any) => {
+    if (buf && buf.length) {
+      req.rawBody = buf;
+    }
+  };
+
+  app.use(json({ verify: rawBodyBuffer, limit: '10mb' }));
+  app.use(urlencoded({ extended: true, verify: rawBodyBuffer, limit: '10mb' }));
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

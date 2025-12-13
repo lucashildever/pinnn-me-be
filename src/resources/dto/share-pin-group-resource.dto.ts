@@ -3,7 +3,6 @@ import {
   IsArray,
   IsString,
   IsOptional,
-  ArrayMaxSize,
   ValidateNested,
 } from 'class-validator';
 import { Transform, plainToInstance } from 'class-transformer';
@@ -19,9 +18,6 @@ export class SharePinGroupResourceDto {
 
   @IsOptional()
   @IsArray()
-  @ArrayMaxSize(5, {
-    message: 'You can add at most 5 additional pins when sharing a pin group',
-  })
   @ValidateNested({ each: true })
   @Transform(({ value }) => {
     if (!Array.isArray(value)) return value;

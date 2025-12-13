@@ -20,9 +20,6 @@ export class Payment extends TimestampEntity {
   id: string;
 
   @Column({ nullable: true, unique: true })
-  stripePaymentIntentId?: string;
-
-  @Column({ nullable: true, unique: true })
   stripeChargeId?: string;
 
   @Column('decimal', { precision: 10, scale: 2 })
@@ -42,11 +39,18 @@ export class Payment extends TimestampEntity {
     nullable: false,
     onDelete: 'RESTRICT',
   })
+  @JoinColumn()
   invoice: Invoice;
+
+  @Column()
+  invoiceId: string;
 
   @OneToOne(() => PaymentAttempt, { nullable: true })
   @JoinColumn()
-  originAttempt?: PaymentAttempt; // the successful "PaymentAttempt" that originated this "Payment"
+  originAttempt?: PaymentAttempt;
+
+  @Column({ nullable: true })
+  originAttemptId?: string;
 
   @Column({ type: 'json', nullable: true })
   metadata?: Record<string, any>;

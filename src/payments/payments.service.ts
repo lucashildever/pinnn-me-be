@@ -49,9 +49,6 @@ export class PaymentsService {
     period: PaymentPeriod,
   ): Promise<CheckoutSessionResponseDto> {
     try {
-      // se eu crio o customer stripe via api antes de direcionar para
-      // a página de checkout, esta parte é desnecessária.
-      // TODO - atualizar isso e garantir q o customer exista antes de chegar nesta etapa
       const customer = await this.findOrCreateStripeCustomer(userId);
       const priceId = this.getPriceIdByPlan(planType, period);
 
@@ -60,10 +57,8 @@ export class PaymentsService {
       }
 
       const paymentAttempt = await this.createPaymentAttempt({
-        // status is set to PENDING by default in entity, no need to set it here
         metadata: {
           userId: userId,
-          // esses dados abaixo são necessários? verificar
           planType: planType,
           period: period,
         },
@@ -72,12 +67,14 @@ export class PaymentsService {
       const session = await this.stripe.checkout.sessions.create({
         customer: customer.id,
         payment_method_types: ['card'],
-        ui_mode: 'embedded',
-        redirect_on_completion: 'never',
+        ui_mode: 'hosted',
         mode: 'subscription',
+        success_url:
+          this.configService.get<string>('urls.frontend') +
+          '/dashboard?session_id={CHECKOUT_SESSION_ID}',
+        cancel_url: this.configService.get<string>('urls.frontend') + '/plans',
         line_items: [
           {
-            // verificar se isso esta certo
             price: priceId,
             quantity: 1,
           },
@@ -89,13 +86,16 @@ export class PaymentsService {
         },
         allow_promotion_codes: true,
         billing_address_collection: 'required',
+        subscription_data: {
+          metadata: {
+            paymentAttemptId: paymentAttempt.id,
+          },
+        },
       });
 
       const priceInfo = await this.stripe.prices.retrieve(priceId);
 
       paymentAttempt.stripeSessionId = session.id;
-      // Verificar se isso está certo ou se eu preciso verificar currency_options
-      // (validar currency usada pelo usuario) - melhor fazer o session.retrieve?
       paymentAttempt.amount = priceInfo.unit_amount ?? undefined;
       paymentAttempt.currency = priceInfo.currency;
 
@@ -104,6 +104,7 @@ export class PaymentsService {
       return {
         sessionId: session.id,
         clientSecret: session.client_secret,
+        url: session.url,
       };
     } catch (error) {
       throw new BadRequestException(
@@ -165,15 +166,26 @@ export class PaymentsService {
         name: name,
       };
 
-      await this.billingsService.createBillingInfo(
-        userId,
-        createBillingInfoDto,
-      );
+      try {
+        await this.billingsService.createBillingInfo(
+          userId,
+          createBillingInfoDto,
+        );
+      } catch (error) {
+        if (error.message === 'Billing info already exists for this user') {
+          await this.billingsService.updateBillingInfo(userId, {
+            stripeCustomerId: stripeCustomer.id,
+          });
+        } else {
+          throw error;
+        }
+      }
 
       return stripeCustomer;
     } catch (error) {
+      if (error instanceof BadRequestException) throw error;
       throw new InternalServerErrorException(
-        'Error while trying to create Stripe customer',
+        `Error while trying to create Stripe customer: ${error.message}`,
       );
     }
   }
@@ -293,16 +305,25 @@ export class PaymentsService {
     updateData: Partial<PaymentAttempt>,
   ): Promise<UpdateResult> {
     try {
-      const result = await this.paymentAttemptRepository.update(
-        { stripeSessionId: sessionId },
-        updateData,
-      );
+      const paymentAttempt = await this.paymentAttemptRepository.findOne({
+        where: { stripeSessionId: sessionId },
+      });
 
-      if (result.affected === 0) {
+      if (!paymentAttempt) {
         throw new NotFoundException(
           `PaymentAttempt with sessionId ${sessionId} not found`,
         );
       }
+
+      const mergedMetadata = {
+        ...(paymentAttempt.metadata || {}),
+        ...(updateData.metadata || {}),
+      };
+
+      const result = await this.paymentAttemptRepository.update(
+        { stripeSessionId: sessionId },
+        { ...updateData, metadata: mergedMetadata },
+      );
 
       return result;
     } catch (error) {
@@ -315,45 +336,34 @@ export class PaymentsService {
     }
   }
 
-  async findPaymentAttemptByPaymentIntentId(
-    paymentIntentId: string,
-  ): Promise<PaymentAttempt | null> {
-    try {
-      return await this.paymentAttemptRepository.findOne({
-        where: { stripePaymentIntentId: paymentIntentId },
-      });
-    } catch (error) {
-      throw new InternalServerErrorException(
-        'Error while trying to find payment attempt by payment intent ID',
-      );
-    }
-  }
-
   async findPaymentAttemptBySubscriptionId(
     subscriptionId: string,
   ): Promise<PaymentAttempt | null> {
     try {
       return await this.paymentAttemptRepository
         .createQueryBuilder('paymentAttempt')
-        .where("paymentAttempt.metadata->>'subscriptionId' = :subscriptionId", {
-          subscriptionId,
-        })
+        .where(
+          "paymentAttempt.metadata->>'$.subscriptionId' = :subscriptionId",
+          {
+            subscriptionId,
+          },
+        )
         .getOne();
     } catch (error) {
       throw new InternalServerErrorException(
-        'Error while trying to find payment attempt by subscription ID',
+        `Error while trying to find payment attempt by subscription ID: ${error.message}`,
       );
     }
   }
 
-  async updatePaymentAttemptByPaymentIntentId(
-    paymentIntentId: string,
-    updateData: Partial<PaymentAttempt>,
-  ) {
-    return this.paymentAttemptRepository.update(
-      { stripePaymentIntentId: paymentIntentId },
-      updateData,
-    );
+  async findPaymentAttemptById(id: string): Promise<PaymentAttempt | null> {
+    try {
+      return await this.paymentAttemptRepository.findOne({ where: { id } });
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Error while trying to find payment attempt by ID',
+      );
+    }
   }
 
   async updatePaymentAttemptById(
@@ -381,16 +391,33 @@ export class PaymentsService {
     return this.paymentRepository.save(payment);
   }
 
-  // Private helpers
   private async findOrCreateStripeCustomer(
     userId: string,
   ): Promise<Stripe.Customer> {
-    const userEmail = (
-      await this.usersService.findOrFail(userId, true, ['email'])
-    ).email;
+    const user = await this.usersService.findOrFail(userId, true, [
+      'email',
+      'username',
+    ]);
+    const userEmail = user.email;
 
-    const { stripeCustomerId, name } =
-      await this.billingsService.findBillingInfoByUserId(userId);
+    let stripeCustomerId: string | undefined;
+    let name: string | undefined = user.username;
+    let billingInfoExists = false;
+
+    try {
+      const billingInfo =
+        await this.billingsService.findBillingInfoByUserId(userId);
+      stripeCustomerId = billingInfo.stripeCustomerId;
+      if (billingInfo.name) {
+        name = billingInfo.name;
+      }
+      billingInfoExists = true;
+    } catch (error) {
+      if (!(error instanceof NotFoundException)) {
+        throw error;
+      }
+      // Billing info not found, proceed with undefined stripeCustomerId
+    }
 
     // if customerId is defined in local DB/billingInfo
     if (stripeCustomerId) {
@@ -399,9 +426,11 @@ export class PaymentsService {
           await this.stripe.customers.retrieve(stripeCustomerId);
 
         if (customerFromStripe.deleted) {
-          await this.billingsService.updateBillingInfo(userId, {
-            stripeCustomerId: undefined,
-          });
+          if (billingInfoExists) {
+            await this.billingsService.updateBillingInfo(userId, {
+              stripeCustomerId: undefined,
+            });
+          }
         } else {
           return customerFromStripe as Stripe.Customer;
         }
@@ -410,9 +439,11 @@ export class PaymentsService {
           error.code === 'resource_missing' ||
           error.message?.includes('No such customer')
         ) {
-          await this.billingsService.updateBillingInfo(userId, {
-            stripeCustomerId: undefined,
-          });
+          if (billingInfoExists) {
+            await this.billingsService.updateBillingInfo(userId, {
+              stripeCustomerId: undefined,
+            });
+          }
         } else {
           throw error;
         }
@@ -425,17 +456,20 @@ export class PaymentsService {
     );
 
     if (existingStripeCustomer) {
-      await this.billingsService.updateBillingInfo(userId, {
-        stripeCustomerId: existingStripeCustomer.id,
-      });
+      if (billingInfoExists) {
+        await this.billingsService.updateBillingInfo(userId, {
+          stripeCustomerId: existingStripeCustomer.id,
+        });
+      } else {
+        await this.billingsService.createBillingInfo(userId, {
+          stripeCustomerId: existingStripeCustomer.id,
+          name: name,
+        });
+      }
       return existingStripeCustomer;
     }
 
     const customer = await this.createStripeCustomer(userId, userEmail, name);
-
-    await this.billingsService.updateBillingInfo(userId, {
-      stripeCustomerId: customer.id,
-    });
 
     return customer;
   }

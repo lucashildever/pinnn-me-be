@@ -20,7 +20,7 @@ export class BillingInfo extends TimestampEntity {
   invoices?: Invoice[];
 
   @OneToOne(() => UserEntity)
-  @JoinColumn({ name: 'userId' })
+  @JoinColumn()
   user?: UserEntity;
 
   @Column({ unique: true })

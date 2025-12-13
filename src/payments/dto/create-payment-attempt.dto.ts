@@ -5,14 +5,6 @@ export class CreatePaymentAttemptDto {
   @IsOptional()
   stripeSessionId?: string;
 
-  @IsString()
-  @IsOptional()
-  stripePaymentIntentId?: string;
-
-  @IsString()
-  @IsOptional()
-  stripeChargeId?: string;
-
   @IsNumber()
   @IsOptional()
   amount?: number;

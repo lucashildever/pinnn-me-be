@@ -29,6 +29,12 @@ export class SubscriptionsService {
       data.stripePriceId,
     );
 
+    if (!plan) {
+      throw new Error(
+        `Plan not found for stripe price id: ${data.stripePriceId}`,
+      );
+    }
+
     let subscription = await this.subscriptionsRepository.findOne({
       where: { stripeSubscriptionId: data.stripeSubscriptionId },
     });
@@ -61,8 +67,40 @@ export class SubscriptionsService {
     }
 
     subscription.plan = plan;
+    subscription.planId = plan.id; // Explicitly set planId for the column
     subscription.status = data.status as SubscriptionStatus;
-    subscription.currentPeriodEnd = data.currentPeriodEnd;
+
+    // Enforce 1 active subscription per user (MVP Rule)
+    // If this subscription is active, cancel all others for this user.
+    if (subscription.status === 'active') {
+      const activeSubs = await this.subscriptionsRepository.find({
+        where: { userId: data.userId, status: 'active' },
+      });
+
+      for (const sub of activeSubs) {
+        // Skip the one we are currently processing
+        if (sub.stripeSubscriptionId !== data.stripeSubscriptionId) {
+          sub.status = 'canceled';
+          await this.subscriptionsRepository.save(sub);
+        }
+      }
+    }
+
+    // Ensure startAt is set for new subscriptions
+    if (!subscription.startAt) {
+      subscription.startAt = new Date();
+    }
+
+    // Validate date
+    if (data.currentPeriodEnd && !isNaN(data.currentPeriodEnd.getTime())) {
+      subscription.currentPeriodEnd = data.currentPeriodEnd;
+    } else {
+      // Fallback or leave as is if update
+      if (!subscription.currentPeriodEnd) {
+        subscription.currentPeriodEnd = new Date(); // Default to now if missing? Or handle error
+      }
+    }
+
     // Ensure userId is set (if we found by stripeId, it might be set, if new, we set it)
     if (!subscription.userId) subscription.userId = data.userId;
 
@@ -156,6 +194,14 @@ export class SubscriptionsService {
         billingProviderId,
       })
       .getOne();
+  }
+
+  async findByStripeSubscriptionId(
+    stripeSubscriptionId: string,
+  ): Promise<Subscription | null> {
+    return this.subscriptionsRepository.findOne({
+      where: { stripeSubscriptionId },
+    });
   }
 
   async hasProAccess(userId: string): Promise<boolean> {

@@ -47,5 +47,8 @@ export default () => {
         // premium: {...}
       },
     },
+    urls: {
+      frontend: process.env.FRONTEND_URL,
+    },
   };
 };

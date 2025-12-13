@@ -19,10 +19,6 @@ export class CreatePaymentDto {
 
   @IsOptional()
   @IsString()
-  stripePaymentIntentId?: string;
-
-  @IsOptional()
-  @IsString()
   stripeChargeId?: string;
 
   @IsNumber({ maxDecimalPlaces: 2 })

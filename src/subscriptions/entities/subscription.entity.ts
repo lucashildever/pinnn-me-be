@@ -19,14 +19,14 @@ export class Subscription extends TimestampEntity {
   id: string;
 
   @ManyToOne(() => UserEntity, (user) => user.subscriptions, { eager: false })
-  @JoinColumn({ name: 'userId' })
+  @JoinColumn()
   user?: UserEntity;
 
   @Column()
   userId: string;
 
   @ManyToOne(() => Plan, { eager: false })
-  @JoinColumn({ name: 'planId' })
+  @JoinColumn()
   plan?: Plan;
 
   @Column()

@@ -58,13 +58,13 @@ export class BillingsService {
 
   async findBillingInfoByCustomerId(
     stripeCustomerId: string,
-  ): Promise<BillingInfo> {
+  ): Promise<BillingInfo | null> {
     const billingInfo = await this.billingInfoRepository.findOne({
       where: { stripeCustomerId },
-      relations: ['user'],
+      relations: ['user'], // ver se é necessário
     });
     if (!billingInfo) {
-      throw new Error(`BillingInfo not found for customer ${stripeCustomerId}`);
+      return null;
     }
     return billingInfo;
   }
@@ -240,6 +240,7 @@ export class BillingsService {
       name: billingInfo.name,
       currency: billingInfo.currency,
       hasStripeCustomer: !!billingInfo.stripeCustomerId,
+      stripeCustomerId: billingInfo.stripeCustomerId,
       updatedAt: billingInfo.updatedAt,
     };
   }
@@ -251,9 +252,6 @@ export class BillingsService {
       status: invoice.status,
       amount: parseFloat(invoice.amount.toString()),
       currency: invoice.currency,
-      planName: invoice.planName,
-      planType: invoice.planType,
-      description: invoice.description,
       processedAt: invoice.processedAt,
       createdAt: invoice.createdAt,
     };

@@ -8,17 +8,14 @@ import {
   Controller,
   Param,
 } from '@nestjs/common';
-
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth-guard';
 import { AuthRequest } from 'src/common/interfaces/auth-request.interface';
-
 import { PaymentsService } from './payments.service';
-
+import { UsersService } from 'src/users/users.service';
 import { CheckoutSessionResponseDto } from './dto/checkout-session-response.dto';
 import { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
 import { CreateCustomerPortalDto } from './dto/create-customer-portal.dto';
 import { SessionStatusDto } from './dto/session-status.dto';
-import { UsersService } from 'src/users/users.service';
 
 @Controller('payments')
 export class PaymentsController {
