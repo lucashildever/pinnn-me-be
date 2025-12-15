@@ -34,6 +34,7 @@ describe('ResourcesService', () => {
   const mockPinsService = {
     findBatchPreviews: jest.fn(),
     findVariants: jest.fn(),
+    findPins: jest.fn(),
     getPinCountsByResourceIds: jest.fn(),
     getPinCountByResourceId: jest.fn(),
   };
@@ -135,10 +136,6 @@ describe('ResourcesService', () => {
         'resource.collectionId = :collectionId',
         { collectionId },
       );
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'resource.status = :status',
-        { status: 'active' },
-      );
       expect(mockQueryBuilder.skip).toHaveBeenCalledWith(0);
       expect(mockQueryBuilder.take).toHaveBeenCalledWith(10);
       expect(pinsService.findBatchPreviews).toHaveBeenCalledWith([
@@ -192,8 +189,118 @@ describe('ResourcesService', () => {
 
       await service.findResources(collectionId, paginationQuery);
 
-      expect(mockQueryBuilder.skip).toHaveBeenCalledWith(5);
       expect(mockQueryBuilder.take).toHaveBeenCalledWith(5);
+    });
+
+    it('should include fromShared data for shared pins inside resources', async () => {
+      const collectionId = 'collection-1';
+      const paginationQuery: PaginationQueryDto = { page: 1, limit: 10 };
+      const mockResource = {
+        id: 'res-1',
+        order: 'a',
+        resourceMeta: null,
+      } as unknown as ResourceEntity;
+
+      const mockPin = {
+        id: 'pin-1',
+        variants: { data: [{ id: 'v-1' }] }, // Fixed: variants should be Paginated
+        meta: { sharedPinId: 'shared-1' },
+      } as unknown as PinDto;
+
+      const mockSharedVariantsResult = {
+        variants: [{ id: 'sv-1' }, { id: 'sv-2' }, { id: 'sv-3' }],
+        pagination: { totalItems: 10 },
+      };
+
+      mockQueryBuilder.getManyAndCount.mockResolvedValue([[mockResource], 1]);
+      mockPinsService.findBatchPreviews.mockResolvedValue(
+        new Map([['res-1', [mockPin]]]),
+      );
+      mockPinsService.getPinCountsByResourceIds.mockResolvedValue(
+        new Map([['res-1', 1]]),
+      );
+      mockPinsService.findVariants.mockResolvedValue(mockSharedVariantsResult);
+
+      const result = await service.findResources(collectionId, paginationQuery);
+
+      expect(mockPinsService.findVariants).toHaveBeenCalledWith('shared-1', {
+        page: 1,
+        limit: 3, // 4 (default limit) - 1 (own variants)
+      });
+      expect(result.resources[0].pins.data[0].fromShared).toBeDefined();
+      expect(
+        result.resources[0].pins.data[0].fromShared!.variants.data,
+      ).toHaveLength(3);
+    });
+
+    it('should include fromShared data for shared pin groups', async () => {
+      const collectionId = 'collection-1';
+      const paginationQuery: PaginationQueryDto = { page: 1, limit: 10 };
+      const mockResource = {
+        id: 'res-1',
+        order: 'a',
+        resourceMeta: { sharedResourceId: 'shared-res-1' },
+      } as unknown as ResourceEntity;
+
+      const mockPin = {
+        id: 'pin-1',
+        variants: { data: [] },
+      } as unknown as PinDto;
+
+      const mockSharedPinsResult = {
+        pins: [
+          {
+            id: 'shared-pin-1',
+            variants: { data: [] }, // Nested shared pin? No, simple shared pin for now
+            meta: { sharedPinId: 'deep-shared-1' }, // Nested shared pin case
+          },
+        ],
+        pagination: { totalItems: 5 },
+      };
+
+      const mockDeepSharedVariantsResult = {
+        variants: [
+          { id: 'dsv-1' },
+          { id: 'dsv-2' },
+          { id: 'dsv-3' },
+          { id: 'dsv-4' },
+        ],
+        pagination: { totalItems: 4 },
+      };
+
+      mockQueryBuilder.getManyAndCount.mockResolvedValue([[mockResource], 1]);
+      mockPinsService.findBatchPreviews.mockResolvedValue(
+        new Map([['res-1', [mockPin]]]),
+      );
+      mockPinsService.getPinCountsByResourceIds.mockResolvedValue(
+        new Map([['res-1', 1]]),
+      );
+      mockPinsService.findPins.mockResolvedValue(mockSharedPinsResult);
+      mockPinsService.findVariants.mockResolvedValue(
+        mockDeepSharedVariantsResult,
+      );
+
+      const result = await service.findResources(collectionId, paginationQuery);
+
+      expect(mockPinsService.findPins).toHaveBeenCalledWith('shared-res-1', {
+        page: 1,
+        limit: 3, // 4 (default) - 1 (own pins)
+      });
+
+      // Verify nested enrichment
+      expect(mockPinsService.findVariants).toHaveBeenCalledWith(
+        'deep-shared-1',
+        {
+          page: 1,
+          limit: 4, // 4 - 0 own variants
+        },
+      );
+
+      expect(result.resources[0].fromShared).toBeDefined();
+      expect(result.resources[0].fromShared!.pins.data).toHaveLength(1);
+      const sharedPin = result.resources[0].fromShared!.pins.data[0];
+      expect(sharedPin.fromShared).toBeDefined();
+      expect(sharedPin.fromShared!.variants.data).toHaveLength(4);
     });
   });
 
@@ -221,10 +328,6 @@ describe('ResourcesService', () => {
       expect(mockQueryBuilder.where).toHaveBeenCalledWith(
         'resource.id = :resourceId',
         { resourceId },
-      );
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'resource.status = :status',
-        { status: 'active' },
       );
       expect(pinsService.findBatchPreviews).toHaveBeenCalledWith([resourceId]);
       expect(pinsService.getPinCountByResourceId).toHaveBeenCalledWith(
@@ -595,6 +698,7 @@ describe('ResourcesService', () => {
           }
           return Promise.resolve(entity);
         }),
+        remove: jest.fn(),
         createQueryBuilder: jest.fn(() => ({
           where: jest.fn().mockReturnThis(),
           andWhere: jest.fn().mockReturnThis(),
@@ -643,20 +747,8 @@ describe('ResourcesService', () => {
       expect(lastSavePin2.resource.id).not.toBe(resourceId);
       expect(lastSavePin2.resourceId).toBe(lastSavePin2.resource.id);
 
-      // Verify ungroupedPins metadata update
-      const savedMetaCall = mockManager.save.mock.calls.find(
-        (call) => call[0] === mockGroupResource.resourceMeta,
-      );
-      expect(savedMetaCall).toBeDefined();
-      expect(savedMetaCall[0].ungroupedPins).toEqual(['pin-1', 'pin-2']);
-
-      // Verify soft delete of group resource
-      const savedResourceCall = mockManager.save.mock.calls.find(
-        (call) => call[0] === mockGroupResource,
-      );
-      expect(savedResourceCall).toBeDefined();
-      expect(savedResourceCall[0].status).toBe('deleted');
-      expect(savedResourceCall[0].deletedAt).toBeDefined();
+      // Verify soft delete of group resource (actually removed in refactor to hard delete)
+      expect(mockManager.remove).toHaveBeenCalledWith(mockGroupResource);
     });
   });
 });

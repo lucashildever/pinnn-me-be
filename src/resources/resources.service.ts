@@ -24,6 +24,7 @@ import { PinMetaEntity } from 'src/pins/entities/pin-meta.entity';
 import { VariantEntity } from 'src/pins/entities/variant.entity';
 import { ResourceDto } from './dto/resource.dto';
 import { CreateVariantDto } from 'src/pins/dto/variant/create-variant.dto';
+import { PinDto } from 'src/pins/dto/pin.dto';
 import { SubscriptionsService } from 'src/subscriptions/subscriptions.service';
 import { PlansService } from 'src/plans/plans.service';
 import { DEFAULT_ITEMS_LIMIT } from 'src/common/constants/pagination.constants';
@@ -65,34 +66,41 @@ export class ResourcesService {
       this.pinsService.getPinCountsByResourceIds(resourceIds),
     ]);
 
-    const transformedResources = resources.map((resource) => {
-      const pins = pinsByResource.get(resource.id) || [];
-      const totalPins = pinCounts.get(resource.id) || pins.length;
-      const meta = resource.resourceMeta
-        ? {
-            sharedResourceId: resource.resourceMeta.sharedResourceId,
-            firstResourceId: resource.resourceMeta.firstResourceId,
-            groupName: resource.resourceMeta.groupName,
-            inheritedPinsTotal: resource.resourceMeta.inheritedPinsTotal,
-            history: resource.resourceMeta.history,
-          }
-        : undefined;
+    const transformedResources = await Promise.all(
+      resources.map(async (resource) => {
+        const pins = pinsByResource.get(resource.id) || [];
+        const totalPins = pinCounts.get(resource.id) || pins.length;
+        const meta = resource.resourceMeta
+          ? {
+              sharedResourceId: resource.resourceMeta.sharedResourceId,
+              firstResourceId: resource.resourceMeta.firstResourceId,
+              groupName: resource.resourceMeta.groupName,
+              inheritedPinsTotal: resource.resourceMeta.inheritedPinsTotal,
+              history: resource.resourceMeta.history,
+            }
+          : undefined;
 
-      return {
-        id: resource.id,
-        order: resource.order,
-        type: this.defineResourceType(meta, pins),
-        pins: {
-          data: pins,
-          pagination: {
-            currentPage: 1,
-            totalItems: totalPins,
-            itemsPerPage: DEFAULT_ITEMS_LIMIT,
+        // Apply enrichment
+        const { pins: enrichedPins, fromShared } =
+          await this.enrichResourceWithSharedPins({ meta }, pins);
+
+        return {
+          id: resource.id,
+          order: resource.order,
+          type: this.defineResourceType(meta, pins),
+          pins: {
+            data: enrichedPins,
+            pagination: {
+              currentPage: 1,
+              totalItems: totalPins,
+              itemsPerPage: DEFAULT_ITEMS_LIMIT,
+            },
           },
-        },
-        meta,
-      };
-    });
+          ...(fromShared ? { fromShared } : {}),
+          meta,
+        };
+      }),
+    );
 
     return {
       resources: transformedResources,
@@ -109,7 +117,6 @@ export class ResourcesService {
       .createQueryBuilder('resource')
       .leftJoinAndSelect('resource.resourceMeta', 'resourceMeta')
       .where('resource.id = :resourceId', { resourceId })
-
       .getOne();
 
     if (!resource) throw new NotFoundException('Resource not found');
@@ -130,18 +137,22 @@ export class ResourcesService {
         }
       : undefined;
 
+    const { pins: enrichedPins, fromShared } =
+      await this.enrichResourceWithSharedPins({ meta }, pins);
+
     return {
       id: resource.id,
       order: resource.order,
       type: this.defineResourceType(meta, pins),
       pins: {
-        data: pins,
+        data: enrichedPins,
         pagination: {
           currentPage: 1,
           totalItems: totalPins,
           itemsPerPage: DEFAULT_ITEMS_LIMIT,
         },
       },
+      ...(fromShared ? { fromShared } : {}),
       meta,
     };
   }
@@ -428,42 +439,8 @@ export class ResourcesService {
       // Prepare pins with fromShared logic for shared pins
       const pinsWithFromShared = await Promise.all(
         createdPins.slice(0, DEFAULT_ITEMS_LIMIT).map(async (pin) => {
-          const isSharedPin = pin.pinMeta?.sharedPinId;
-
-          if (isSharedPin) {
-            const ownVariantsCount = pin.variants.length;
-            let fromSharedData:
-              | {
-                  variants: {
-                    data: { id: string; order: string; config: any }[];
-                    pagination: {
-                      currentPage: number;
-                      totalItems: number;
-                      itemsPerPage: number;
-                    };
-                  };
-                }
-              | undefined = undefined;
-
-            if (ownVariantsCount < DEFAULT_ITEMS_LIMIT) {
-              const remainingToFetch = DEFAULT_ITEMS_LIMIT - ownVariantsCount;
-              const sharedVariantsResult = await this.pinsService.findVariants(
-                pin.pinMeta.sharedPinId,
-                { page: 1, limit: remainingToFetch },
-              );
-
-              fromSharedData = {
-                variants: {
-                  data: sharedVariantsResult.variants,
-                  pagination: sharedVariantsResult.pagination,
-                },
-              };
-            }
-
-            return this.mapPinToDto(pin, { fromShared: fromSharedData });
-          }
-
-          return this.mapPinToDto(pin);
+          const baseDto = this.mapPinToDto(pin);
+          return this.enrichPinWithSharedData(baseDto);
         }),
       );
 
@@ -606,42 +583,15 @@ export class ResourcesService {
 
       const savedPin = await manager.save(pin);
 
-      // Check if we need to fetch additional variants from the shared pin
-      const ownVariantsCount = savedPin.variants.length;
-      let fromSharedData:
-        | {
-            variants: {
-              data: { id: string; order: string; config: any }[];
-              pagination: {
-                currentPage: number;
-                totalItems: number;
-                itemsPerPage: number;
-              };
-            };
-          }
-        | undefined = undefined;
-
-      if (ownVariantsCount < DEFAULT_ITEMS_LIMIT) {
-        const remainingToFetch = DEFAULT_ITEMS_LIMIT - ownVariantsCount;
-        const sharedVariantsResult = await this.pinsService.findVariants(
-          sharePinResourceDto.sharedPinId,
-          { page: 1, limit: remainingToFetch },
-        );
-
-        fromSharedData = {
-          variants: {
-            data: sharedVariantsResult.variants,
-            pagination: sharedVariantsResult.pagination,
-          },
-        };
-      }
+      const basePinDto = this.mapPinToDto(savedPin);
+      const enrichedPin = await this.enrichPinWithSharedData(basePinDto);
 
       return {
         id: savedResource.id,
         order: savedResource.order,
         type: 'shared-pin',
         pins: {
-          data: [this.mapPinToDto(savedPin, { fromShared: fromSharedData })],
+          data: [enrichedPin],
           pagination: {
             currentPage: 1,
             totalItems: 1,
@@ -909,132 +859,38 @@ export class ResourcesService {
         }
       }
       // Prepare pins with fromShared logic for shared pins
-      const pinsWithFromShared = await Promise.all(
-        createdPins.slice(0, DEFAULT_ITEMS_LIMIT).map(async (pin) => {
-          const isSharedPin = pin.pinMeta?.sharedPinId;
+      // We first map to DTO and enrich individual pins (variants level)
+      const initialPins = createdPins
+        .slice(0, DEFAULT_ITEMS_LIMIT)
+        .map((pin) => this.mapPinToDto(pin));
 
-          if (isSharedPin) {
-            const ownVariantsCount = pin.variants.length;
-            let fromSharedData:
-              | {
-                  variants: {
-                    data: { id: string; order: string; config: any }[];
-                    pagination: {
-                      currentPage: number;
-                      totalItems: number;
-                      itemsPerPage: number;
-                    };
-                  };
-                }
-              | undefined = undefined;
+      const meta = {
+        groupName: savedResource.resourceMeta.groupName,
+        firstResourceId: savedResource.resourceMeta.firstResourceId,
+        inheritedPinsTotal: savedResource.resourceMeta.inheritedPinsTotal,
+        history: savedResource.resourceMeta.history,
+        sharedResourceId: savedResource.resourceMeta.sharedResourceId,
+      };
 
-            if (ownVariantsCount < DEFAULT_ITEMS_LIMIT) {
-              const remainingToFetch = DEFAULT_ITEMS_LIMIT - ownVariantsCount;
-              const sharedVariantsResult = await this.pinsService.findVariants(
-                pin.pinMeta.sharedPinId,
-                { page: 1, limit: remainingToFetch },
-              );
-
-              fromSharedData = {
-                variants: {
-                  data: sharedVariantsResult.variants,
-                  pagination: sharedVariantsResult.pagination,
-                },
-              };
-            }
-
-            return this.mapPinToDto(pin, { fromShared: fromSharedData });
-          }
-
-          return this.mapPinToDto(pin);
-        }),
-      );
+      const { pins: enrichedPins, fromShared } =
+        await this.enrichResourceWithSharedPins({ meta }, initialPins);
 
       const ownPinsCount = createdPins.length;
-      let fromSharedResourceData:
-        | {
-            pins: {
-              data: any[];
-              pagination: {
-                currentPage: number;
-                totalItems: number;
-                itemsPerPage: number;
-              };
-            };
-          }
-        | undefined = undefined;
-
-      // If own pins count < DEFAULT_ITEMS_LIMIT, fetch additional pins from shared resource
-      if (ownPinsCount < DEFAULT_ITEMS_LIMIT) {
-        const remainingToFetch = DEFAULT_ITEMS_LIMIT - ownPinsCount;
-        const sharedPinsResult = await this.pinsService.findPins(
-          sharePinGroupResourceDto.sharedResourceId,
-          { page: 1, limit: remainingToFetch },
-        );
-
-        // For each pin from shared resource, also apply fromShared logic for variants
-        const sharedPinsWithVariantFromShared = await Promise.all(
-          sharedPinsResult.pins.map(async (sharedPin) => {
-            const isNestedSharedPin = sharedPin.meta?.sharedPinId;
-
-            if (isNestedSharedPin) {
-              const ownVariantsCount = sharedPin.variants.data.length;
-
-              if (ownVariantsCount < DEFAULT_ITEMS_LIMIT) {
-                const remainingVariantsToFetch =
-                  DEFAULT_ITEMS_LIMIT - ownVariantsCount;
-                const nestedSharedVariantsResult =
-                  await this.pinsService.findVariants(isNestedSharedPin, {
-                    page: 1,
-                    limit: remainingVariantsToFetch,
-                  });
-
-                return {
-                  ...sharedPin,
-                  fromShared: {
-                    variants: {
-                      data: nestedSharedVariantsResult.variants,
-                      pagination: nestedSharedVariantsResult.pagination,
-                    },
-                  },
-                };
-              }
-            }
-
-            return sharedPin;
-          }),
-        );
-
-        fromSharedResourceData = {
-          pins: {
-            data: sharedPinsWithVariantFromShared,
-            pagination: sharedPinsResult.pagination,
-          },
-        };
-      }
 
       return {
         id: savedResource.id,
         order: savedResource.order,
         type: 'shared-pin-group',
         pins: {
-          data: pinsWithFromShared,
+          data: enrichedPins,
           pagination: {
             currentPage: 1,
             totalItems: ownPinsCount,
             itemsPerPage: DEFAULT_ITEMS_LIMIT,
           },
         },
-        ...(fromSharedResourceData
-          ? { fromShared: fromSharedResourceData }
-          : {}),
-        meta: {
-          groupName: savedResource.resourceMeta.groupName,
-          firstResourceId: savedResource.resourceMeta.firstResourceId,
-          inheritedPinsTotal: savedResource.resourceMeta.inheritedPinsTotal,
-          history: savedResource.resourceMeta.history,
-          sharedResourceId: savedResource.resourceMeta.sharedResourceId,
-        },
+        ...(fromShared ? { fromShared } : {}),
+        meta,
       };
     });
   }
@@ -1246,42 +1102,8 @@ export class ResourcesService {
 
       const pinsWithFromShared = await Promise.all(
         createdPins.slice(0, DEFAULT_ITEMS_LIMIT).map(async (pin) => {
-          const isSharedPin = pin.pinMeta?.sharedPinId;
-
-          if (isSharedPin) {
-            const ownVariantsCount = pin.variants?.length || 0;
-            let fromSharedData:
-              | {
-                  variants: {
-                    data: { id: string; order: string; config: any }[];
-                    pagination: {
-                      currentPage: number;
-                      totalItems: number;
-                      itemsPerPage: number;
-                    };
-                  };
-                }
-              | undefined = undefined;
-
-            if (ownVariantsCount < DEFAULT_ITEMS_LIMIT) {
-              const remainingToFetch = DEFAULT_ITEMS_LIMIT - ownVariantsCount;
-              const sharedVariantsResult = await this.pinsService.findVariants(
-                pin.pinMeta.sharedPinId,
-                { page: 1, limit: remainingToFetch },
-              );
-
-              fromSharedData = {
-                variants: {
-                  data: sharedVariantsResult.variants,
-                  pagination: sharedVariantsResult.pagination,
-                },
-              };
-            }
-
-            return this.mapPinToDto(pin, { fromShared: fromSharedData });
-          }
-
-          return this.mapPinToDto(pin);
+          const baseDto = this.mapPinToDto(pin);
+          return this.enrichPinWithSharedData(baseDto);
         }),
       );
 
@@ -1395,43 +1217,15 @@ export class ResourcesService {
         (pin as any).order = null; // Single-pin resources don't need pin order
         await manager.save(pin);
 
-        let fromSharedData:
-          | {
-              variants: {
-                data: { id: string; order: string; config: any }[];
-                pagination: {
-                  currentPage: number;
-                  totalItems: number;
-                  itemsPerPage: number;
-                };
-              };
-            }
-          | undefined = undefined;
-
-        if (isSharedPin) {
-          const ownVariantsCount = pin.variants?.length || 0;
-          if (ownVariantsCount < DEFAULT_ITEMS_LIMIT) {
-            const remainingToFetch = DEFAULT_ITEMS_LIMIT - ownVariantsCount;
-            const sharedVariantsResult = await this.pinsService.findVariants(
-              pin.pinMeta!.sharedPinId!,
-              { page: 1, limit: remainingToFetch },
-            );
-
-            fromSharedData = {
-              variants: {
-                data: sharedVariantsResult.variants,
-                pagination: sharedVariantsResult.pagination,
-              },
-            };
-          }
-        }
+        const basePinDto = this.mapPinToDto(pin);
+        const enrichedPin = await this.enrichPinWithSharedData(basePinDto);
 
         createdResources.push({
           id: savedResource.id,
           order: savedResource.order,
           type: isSharedPin ? 'shared-pin' : 'pin',
           pins: {
-            data: [this.mapPinToDto(pin, { fromShared: fromSharedData })],
+            data: [enrichedPin],
             pagination: {
               currentPage: 1,
               totalItems: 1,
@@ -1445,6 +1239,81 @@ export class ResourcesService {
 
       return createdResources;
     });
+  }
+
+  private async enrichPinWithSharedData(
+    pin: PinDto,
+    checkNested: boolean = true,
+  ): Promise<PinDto> {
+    const isSharedPin = pin.meta?.sharedPinId;
+
+    if (isSharedPin) {
+      const ownVariantsCount = pin.variants.data.length;
+
+      if (ownVariantsCount < DEFAULT_ITEMS_LIMIT) {
+        const remainingToFetch = DEFAULT_ITEMS_LIMIT - ownVariantsCount;
+        const sharedVariantsResult = await this.pinsService.findVariants(
+          pin.meta!.sharedPinId!,
+          { page: 1, limit: remainingToFetch },
+        );
+
+        return {
+          ...pin,
+          fromShared: {
+            variants: {
+              data: sharedVariantsResult.variants,
+              pagination: sharedVariantsResult.pagination,
+            },
+          },
+        };
+      }
+    }
+    return pin;
+  }
+
+  private async enrichResourceWithSharedPins(
+    resource: any, // ResourceDto or structure resembling it
+    pins: PinDto[],
+  ): Promise<{ pins: PinDto[]; fromShared?: any }> {
+    // Enrich existing pins (e.g. if they are shared pins themselves)
+    const enrichedPins = await Promise.all(
+      pins.map((pin) => this.enrichPinWithSharedData(pin, true)),
+    );
+
+    const isSharedGroup = resource.meta?.sharedResourceId;
+    let fromSharedResourceData: any = undefined;
+
+    if (isSharedGroup) {
+      const ownPinsCount = enrichedPins.length;
+
+      if (ownPinsCount < DEFAULT_ITEMS_LIMIT) {
+        const remainingToFetch = DEFAULT_ITEMS_LIMIT - ownPinsCount;
+        const sharedPinsResult = await this.pinsService.findPins(
+          resource.meta.sharedResourceId,
+          { page: 1, limit: remainingToFetch },
+        );
+
+        // For pins coming from the shared group, we also need to check if THEY are shared pins (nested)
+        // and enrich them if they are.
+        const sharedPinsWithVariantFromShared = await Promise.all(
+          sharedPinsResult.pins.map(async (sharedPin) => {
+            return this.enrichPinWithSharedData(sharedPin, true);
+          }),
+        );
+
+        fromSharedResourceData = {
+          pins: {
+            data: sharedPinsWithVariantFromShared,
+            pagination: sharedPinsResult.pagination,
+          },
+        };
+      }
+    }
+
+    return {
+      pins: enrichedPins,
+      fromShared: fromSharedResourceData,
+    };
   }
 
   private generateHistory(
