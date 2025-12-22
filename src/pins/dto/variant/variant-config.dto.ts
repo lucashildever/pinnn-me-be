@@ -19,26 +19,37 @@ export class VariantConfigDto {
   @IsNotEmpty()
   type: PinVariant;
 
-  @ValidateIf((o) => o.type === 'title' || o.type === 'text')
+  @ValidateIf(
+    (o) =>
+      o.type === 'title' ||
+      o.type === 'text' ||
+      o.type === 'link' ||
+      o.type === 'download',
+  )
   @IsString()
   @IsNotEmpty()
   @ValidateIf((o) => o.type === 'title')
   @MaxLength(50, { message: 'Title content must not exceed 50 characters' })
   @ValidateIf((o) => o.type === 'text')
   @MaxLength(100, { message: 'Text content must not exceed 100 characters' })
+  @ValidateIf((o) => o.type === 'link' || o.type === 'download')
+  @MaxLength(25, {
+    message: 'Link and Download content must not exceed 25 characters',
+  })
   content?: string;
-
-  @ValidateIf((o) => o.type === 'link')
-  @IsUrl()
-  @IsNotEmpty()
-  href?: string;
 
   @ValidateIf((o) => o.type === 'link' || o.type === 'download')
   @ValidateNested()
   @Type(() => IconConfigDto)
   iconConfig?: IconConfigDto;
 
-  @ValidateIf((o) => o.type === 'image')
+  @ValidateIf(
+    (o) =>
+      o.type === 'image' ||
+      o.type === 'video' ||
+      o.type === 'link' ||
+      o.type === 'download',
+  )
   @IsUrl()
   @IsNotEmpty()
   src?: string;

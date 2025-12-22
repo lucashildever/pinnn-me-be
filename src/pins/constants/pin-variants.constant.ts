@@ -3,6 +3,7 @@ export const PIN_VARIANTS = [
   'text',
   'title',
   'image',
+  'video',
   'download',
   'integration',
 ] as const;

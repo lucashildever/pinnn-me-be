@@ -1250,23 +1250,29 @@ export class ResourcesService {
     if (isSharedPin) {
       const ownVariantsCount = pin.variants.data.length;
 
-      if (ownVariantsCount < DEFAULT_ITEMS_LIMIT) {
-        const remainingToFetch = DEFAULT_ITEMS_LIMIT - ownVariantsCount;
-        const sharedVariantsResult = await this.pinsService.findVariants(
-          pin.meta!.sharedPinId!,
-          { page: 1, limit: remainingToFetch },
-        );
+      // Calculate remaining space for shared variants
+      const remainingToFetch = Math.max(
+        0,
+        DEFAULT_ITEMS_LIMIT - ownVariantsCount,
+      );
 
-        return {
-          ...pin,
-          fromShared: {
-            variants: {
-              data: sharedVariantsResult.variants,
-              pagination: sharedVariantsResult.pagination,
-            },
+      // Always fetch shared variants to get pagination info
+      // If remainingToFetch is 0, we still need the total count for pagination
+      const sharedVariantsResult = await this.pinsService.findVariants(
+        pin.meta!.sharedPinId!,
+        { page: 1, limit: remainingToFetch > 0 ? remainingToFetch : 1 },
+      );
+
+      return {
+        ...pin,
+        fromShared: {
+          variants: {
+            // Include data only if there's remaining space, otherwise empty array
+            data: remainingToFetch > 0 ? sharedVariantsResult.variants : [],
+            pagination: sharedVariantsResult.pagination,
           },
-        };
-      }
+        },
+      };
     }
     return pin;
   }
@@ -1286,28 +1292,31 @@ export class ResourcesService {
     if (isSharedGroup) {
       const ownPinsCount = enrichedPins.length;
 
-      if (ownPinsCount < DEFAULT_ITEMS_LIMIT) {
-        const remainingToFetch = DEFAULT_ITEMS_LIMIT - ownPinsCount;
-        const sharedPinsResult = await this.pinsService.findPins(
-          resource.meta.sharedResourceId,
-          { page: 1, limit: remainingToFetch },
-        );
+      // Calculate remaining space for shared pins
+      const remainingToFetch = Math.max(0, DEFAULT_ITEMS_LIMIT - ownPinsCount);
 
-        // For pins coming from the shared group, we also need to check if THEY are shared pins (nested)
-        // and enrich them if they are.
-        const sharedPinsWithVariantFromShared = await Promise.all(
-          sharedPinsResult.pins.map(async (sharedPin) => {
-            return this.enrichPinWithSharedData(sharedPin, true);
-          }),
-        );
+      // Always fetch shared pins to get pagination info
+      // If remainingToFetch is 0, we still need the total count for pagination
+      const sharedPinsResult = await this.pinsService.findPins(
+        resource.meta.sharedResourceId,
+        { page: 1, limit: remainingToFetch > 0 ? remainingToFetch : 1 },
+      );
 
-        fromSharedResourceData = {
-          pins: {
-            data: sharedPinsWithVariantFromShared,
-            pagination: sharedPinsResult.pagination,
-          },
-        };
-      }
+      // For pins coming from the shared group, we also need to check if THEY are shared pins (nested)
+      // and enrich them if they are.
+      const sharedPinsWithVariantFromShared = await Promise.all(
+        sharedPinsResult.pins.map(async (sharedPin) => {
+          return this.enrichPinWithSharedData(sharedPin, true);
+        }),
+      );
+
+      fromSharedResourceData = {
+        pins: {
+          // Include data only if there's remaining space, otherwise empty array
+          data: remainingToFetch > 0 ? sharedPinsWithVariantFromShared : [],
+          pagination: sharedPinsResult.pagination,
+        },
+      };
     }
 
     return {
