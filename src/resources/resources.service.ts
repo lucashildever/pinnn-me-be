@@ -28,6 +28,9 @@ import { PinDto } from 'src/pins/dto/pin.dto';
 import { SubscriptionsService } from 'src/subscriptions/subscriptions.service';
 import { PlansService } from 'src/plans/plans.service';
 import { DEFAULT_ITEMS_LIMIT } from 'src/common/constants/pagination.constants';
+import { MuralAppearanceEntity } from 'src/murals/entities/mural-appearance.entity';
+import { MuralEntity } from 'src/murals/entities/mural.entity';
+import { HistoryPreview } from './types/history-preview.type';
 
 @Injectable()
 export class ResourcesService {
@@ -50,6 +53,13 @@ export class ResourcesService {
     const { page = 1, limit = 5 } = paginationQueryDto;
     const skip = (page - 1) * limit;
 
+    // Get collection to know the current mural
+    const collection = await this.dataSource
+      .getRepository(CollectionEntity)
+      .findOne({ where: { id: collectionId } });
+
+    const currentMuralId = collection?.muralId;
+
     const queryBuilder = this.resourcesRepository
       .createQueryBuilder('resource')
       .leftJoinAndSelect('resource.resourceMeta', 'resourceMeta')
@@ -70,19 +80,47 @@ export class ResourcesService {
       resources.map(async (resource) => {
         const pins = pinsByResource.get(resource.id) || [];
         const totalPins = pinCounts.get(resource.id) || pins.length;
+
+        // Enrich history with preview if exists
+        let enrichedHistory = resource.resourceMeta?.history;
+        let ownerPreview;
+        if (enrichedHistory && enrichedHistory.length > 0 && currentMuralId) {
+          const result = await this.enrichHistoryWithPreview(
+            enrichedHistory,
+            currentMuralId,
+            collectionId,
+          );
+          enrichedHistory = result.entries;
+          ownerPreview = result.ownerPreview;
+        }
+
         const meta = resource.resourceMeta
           ? {
               sharedResourceId: resource.resourceMeta.sharedResourceId,
               firstResourceId: resource.resourceMeta.firstResourceId,
               groupName: resource.resourceMeta.groupName,
               inheritedPinsTotal: resource.resourceMeta.inheritedPinsTotal,
-              history: resource.resourceMeta.history,
+              history: enrichedHistory,
+              ownerPreview,
             }
           : undefined;
 
+        // Enrich history of individual pins
+        let pinsWithEnrichedHistory = pins;
+        if (currentMuralId) {
+          pinsWithEnrichedHistory = await this.enrichPinsMetaHistory(
+            pins,
+            currentMuralId,
+            collectionId,
+          );
+        }
+
         // Apply enrichment
         const { pins: enrichedPins, fromShared } =
-          await this.enrichResourceWithSharedPins({ meta }, pins);
+          await this.enrichResourceWithSharedPins(
+            { meta },
+            pinsWithEnrichedHistory,
+          );
 
         return {
           id: resource.id,
@@ -116,10 +154,14 @@ export class ResourcesService {
     const resource = await this.resourcesRepository
       .createQueryBuilder('resource')
       .leftJoinAndSelect('resource.resourceMeta', 'resourceMeta')
+      .leftJoinAndSelect('resource.collection', 'collection')
       .where('resource.id = :resourceId', { resourceId })
       .getOne();
 
     if (!resource) throw new NotFoundException('Resource not found');
+
+    const currentMuralId = resource.collection?.muralId;
+    const collectionId = resource.collectionId;
 
     const [pinsByResource, totalPins] = await Promise.all([
       this.pinsService.findBatchPreviews([resource.id]),
@@ -127,18 +169,46 @@ export class ResourcesService {
     ]);
 
     const pins = pinsByResource.get(resource.id) || [];
+
+    // Enrich history with preview if exists
+    let enrichedHistory = resource.resourceMeta?.history;
+    let ownerPreview;
+    if (enrichedHistory && enrichedHistory.length > 0 && currentMuralId) {
+      const result = await this.enrichHistoryWithPreview(
+        enrichedHistory,
+        currentMuralId,
+        collectionId,
+      );
+      enrichedHistory = result.entries;
+      ownerPreview = result.ownerPreview;
+    }
+
     const meta = resource.resourceMeta
       ? {
           sharedResourceId: resource.resourceMeta.sharedResourceId,
           firstResourceId: resource.resourceMeta.firstResourceId,
           groupName: resource.resourceMeta.groupName,
           inheritedPinsTotal: resource.resourceMeta.inheritedPinsTotal,
-          history: resource.resourceMeta.history,
+          history: enrichedHistory,
+          ownerPreview,
         }
       : undefined;
 
+    // Enrich history of individual pins
+    let pinsWithEnrichedHistory = pins;
+    if (currentMuralId) {
+      pinsWithEnrichedHistory = await this.enrichPinsMetaHistory(
+        pins,
+        currentMuralId,
+        collectionId,
+      );
+    }
+
     const { pins: enrichedPins, fromShared } =
-      await this.enrichResourceWithSharedPins({ meta }, pins);
+      await this.enrichResourceWithSharedPins(
+        { meta },
+        pinsWithEnrichedHistory,
+      );
 
     return {
       id: resource.id,
@@ -586,6 +656,17 @@ export class ResourcesService {
       const basePinDto = this.mapPinToDto(savedPin);
       const enrichedPin = await this.enrichPinWithSharedData(basePinDto);
 
+      // Enrich history with preview
+      if (enrichedPin.meta?.history && enrichedPin.meta.history.length > 0) {
+        const result = await this.enrichHistoryWithPreview(
+          enrichedPin.meta.history,
+          collection.muralId,
+          collectionId,
+        );
+        enrichedPin.meta.history = result.entries;
+        (enrichedPin.meta as any).ownerPreview = result.ownerPreview;
+      }
+
       return {
         id: savedResource.id,
         order: savedResource.order,
@@ -864,11 +945,19 @@ export class ResourcesService {
         .slice(0, DEFAULT_ITEMS_LIMIT)
         .map((pin) => this.mapPinToDto(pin));
 
+      // Enrich history with preview
+      const historyResult = await this.enrichHistoryWithPreview(
+        savedResource.resourceMeta.history,
+        collection.muralId,
+        collectionId,
+      );
+
       const meta = {
         groupName: savedResource.resourceMeta.groupName,
         firstResourceId: savedResource.resourceMeta.firstResourceId,
         inheritedPinsTotal: savedResource.resourceMeta.inheritedPinsTotal,
-        history: savedResource.resourceMeta.history,
+        history: historyResult.entries,
+        ownerPreview: historyResult.ownerPreview,
         sharedResourceId: savedResource.resourceMeta.sharedResourceId,
       };
 
@@ -1424,5 +1513,130 @@ export class ResourcesService {
     }
 
     return 'pin';
+  }
+
+  /**
+   * Enriches history entries with preview information and mural names.
+   * - For each entry: adds muralName from sourceMuralId
+   * - If sourceMuralId === currentMuralId: preview = collection iconConfig
+   * - If sourceMuralId !== currentMuralId: preview = mural profileImageUrl
+   * - Also returns ownerPreview: profileImageUrl of the current mural
+   */
+  async enrichHistoryWithPreview(
+    history: { sourceMuralId: string; order: number }[],
+    currentMuralId: string,
+    sourceCollectionId?: string,
+  ): Promise<{
+    entries: {
+      sourceMuralId: string;
+      order: number;
+      muralName?: string;
+      preview?: HistoryPreview;
+    }[];
+    ownerPreview: HistoryPreview;
+  }> {
+    if (!history || history.length === 0) {
+      return { entries: history, ownerPreview: { type: 'none' } };
+    }
+
+    // Get owner mural's profile image
+    const ownerAppearance = await this.dataSource
+      .getRepository(MuralAppearanceEntity)
+      .findOne({
+        where: { muralId: currentMuralId },
+      });
+
+    const ownerPreview: HistoryPreview = ownerAppearance?.profileImageUrl
+      ? { type: 'image', url: ownerAppearance.profileImageUrl }
+      : { type: 'none' };
+
+    // Import MuralEntity for name lookup
+    const enrichedEntries = await Promise.all(
+      history.map(async (entry) => {
+        // Get mural name for this entry
+        const mural = await this.dataSource.getRepository(MuralEntity).findOne({
+          where: { id: entry.sourceMuralId },
+          select: ['displayName'],
+        });
+
+        const muralName = mural?.displayName;
+
+        if (entry.sourceMuralId === currentMuralId) {
+          // Same mural: get collection iconConfig
+          if (sourceCollectionId) {
+            const collection = await this.dataSource
+              .getRepository(CollectionEntity)
+              .findOne({
+                where: { id: sourceCollectionId },
+                relations: ['displayElement'],
+              });
+            if (collection?.displayElement?.iconConfig) {
+              return {
+                ...entry,
+                muralName,
+                preview: {
+                  type: 'icon' as const,
+                  icon: collection.displayElement.iconConfig,
+                },
+              };
+            }
+          }
+          return { ...entry, muralName };
+        } else {
+          // Different mural: get mural profileImageUrl
+          const appearance = await this.dataSource
+            .getRepository(MuralAppearanceEntity)
+            .findOne({
+              where: { muralId: entry.sourceMuralId },
+            });
+          if (appearance?.profileImageUrl) {
+            return {
+              ...entry,
+              muralName,
+              preview: {
+                type: 'image' as const,
+                url: appearance.profileImageUrl,
+              },
+            };
+          }
+          return { ...entry, muralName };
+        }
+      }),
+    );
+
+    return {
+      entries: enrichedEntries,
+      ownerPreview,
+    };
+  }
+
+  /**
+   * Enriches the history in each pin's meta with preview information.
+   */
+  async enrichPinsMetaHistory(
+    pins: PinDto[],
+    currentMuralId: string,
+    collectionId: string,
+  ): Promise<PinDto[]> {
+    return Promise.all(
+      pins.map(async (pin) => {
+        if (pin.meta?.history && pin.meta.history.length > 0) {
+          const result = await this.enrichHistoryWithPreview(
+            pin.meta.history,
+            currentMuralId,
+            collectionId,
+          );
+          return {
+            ...pin,
+            meta: {
+              ...pin.meta,
+              history: result.entries,
+              ownerPreview: result.ownerPreview,
+            },
+          };
+        }
+        return pin;
+      }),
+    );
   }
 }
