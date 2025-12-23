@@ -20,11 +20,15 @@ import { UsersService } from 'src/users/users.service';
 import { ResourcesService } from 'src/resources/resources.service';
 
 import { MuralEntity } from './entities/mural.entity';
+import { MuralAppearanceEntity } from './entities/mural-appearance.entity';
 import { CallToActionDto } from './dto/call-to-action/call-to-action.dto';
 import { CallToActionEntity } from './entities/call-to-action.entity';
 import { DisplayElementEntity } from 'src/common/entities/display-element.entity';
 import { UpdateCallToActionDto } from './dto/call-to-action/update-call-to-action.dto';
 import { CreateCallToActionDto } from './dto/call-to-action/create-call-to-action.dto';
+import { CreateMuralAppearanceDto } from './dto/appearance/create-mural-appearance.dto';
+import { UpdateMuralAppearanceDto } from './dto/appearance/update-mural-appearance.dto';
+import { MuralAppearanceDto } from './dto/appearance/mural-appearance.dto';
 
 @Injectable()
 export class MuralsService {
@@ -35,6 +39,8 @@ export class MuralsService {
     private readonly callToActionsRepository: Repository<CallToActionEntity>,
     @InjectRepository(DisplayElementEntity)
     private readonly displayElementRepository: Repository<DisplayElementEntity>,
+    @InjectRepository(MuralAppearanceEntity)
+    private readonly appearanceRepository: Repository<MuralAppearanceEntity>,
 
     private readonly collectionsService: CollectionsService,
     private readonly credentialsService: CredentialsService,
@@ -81,12 +87,24 @@ export class MuralsService {
       }),
     );
 
+    const appearance = await this.appearanceRepository.findOne({
+      where: { muralId: mural.id },
+    });
+
     const response: MuralResponseDto = {
       id: mural.id,
       name: mural.name,
       displayName: mural.displayName,
       description: mural.description,
       collections,
+      appearance: appearance
+        ? {
+            id: appearance.id,
+            profileImageUrl: appearance.profileImageUrl,
+            coverImageUrl: appearance.coverImageUrl,
+            themeConfig: appearance.themeConfig,
+          }
+        : undefined,
     };
 
     const callToActions = await this.callToActionsRepository.find({
@@ -134,11 +152,23 @@ export class MuralsService {
       },
     });
 
+    // Create default appearance
+    const appearance = this.appearanceRepository.create({
+      muralId: savedMural.id,
+    });
+    const savedAppearance = await this.appearanceRepository.save(appearance);
+
     const response: MuralResponseDto = {
       id: savedMural.id,
       name: savedMural.name,
       displayName: savedMural.displayName,
       description: savedMural.description,
+      appearance: {
+        id: savedAppearance.id,
+        profileImageUrl: savedAppearance.profileImageUrl,
+        coverImageUrl: savedAppearance.coverImageUrl,
+        themeConfig: savedAppearance.themeConfig,
+      },
     };
 
     await this.cacheService.del(this.MURAL_NAME_CACHE_KEY(muralDto.name));
@@ -385,6 +415,83 @@ export class MuralsService {
       content: callToAction.displayElement.content,
       iconConfig: callToAction.displayElement.iconConfig,
       callToActionConfig: callToAction.callToActionConfig,
+    };
+  }
+
+  async createAppearance(
+    muralId: string,
+    createAppearanceDto?: CreateMuralAppearanceDto,
+  ): Promise<MuralAppearanceDto> {
+    const mural = await this.muralsRepository.findOne({
+      where: { id: muralId },
+    });
+
+    if (!mural) {
+      throw new NotFoundException(`Mural com ID ${muralId} não encontrado`);
+    }
+
+    const existingAppearance = await this.appearanceRepository.findOne({
+      where: { muralId },
+    });
+
+    if (existingAppearance) {
+      throw new BadRequestException(
+        `Mural já possui uma configuração de aparência`,
+      );
+    }
+
+    const appearance = this.appearanceRepository.create({
+      muralId,
+      ...(createAppearanceDto || {}),
+    });
+
+    const savedAppearance = await this.appearanceRepository.save(appearance);
+
+    return {
+      id: savedAppearance.id,
+      profileImageUrl: savedAppearance.profileImageUrl,
+      coverImageUrl: savedAppearance.coverImageUrl,
+      themeConfig: savedAppearance.themeConfig,
+    };
+  }
+
+  async updateAppearance(
+    muralId: string,
+    updateAppearanceDto: UpdateMuralAppearanceDto,
+  ): Promise<MuralAppearanceDto> {
+    const appearance = await this.appearanceRepository.findOne({
+      where: { muralId },
+    });
+
+    if (!appearance) {
+      throw new NotFoundException(
+        `Configuração de aparência não encontrada para o mural`,
+      );
+    }
+
+    await this.appearanceRepository.update(
+      { id: appearance.id },
+      updateAppearanceDto,
+    );
+
+    const updatedAppearance = await this.appearanceRepository.findOneOrFail({
+      where: { id: appearance.id },
+    });
+
+    // Invalidate cache
+    const mural = await this.muralsRepository.findOne({
+      where: { id: muralId },
+    });
+    if (mural) {
+      await this.cacheService.del(this.MURAL_CACHE_KEY(mural.name, true));
+      await this.cacheService.del(this.MURAL_CACHE_KEY(mural.name, false));
+    }
+
+    return {
+      id: updatedAppearance.id,
+      profileImageUrl: updatedAppearance.profileImageUrl,
+      coverImageUrl: updatedAppearance.coverImageUrl,
+      themeConfig: updatedAppearance.themeConfig,
     };
   }
 }

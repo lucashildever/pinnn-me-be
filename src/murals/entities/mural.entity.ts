@@ -4,6 +4,7 @@ import {
   ManyToOne,
   JoinColumn,
   OneToMany,
+  OneToOne,
   UpdateDateColumn,
   PrimaryGeneratedColumn,
 } from 'typeorm';
@@ -12,6 +13,7 @@ import { UserEntity } from 'src/users/entities/user.entity';
 import { CollectionEntity } from '../../collections/entities/collection.entity';
 
 import { CallToActionEntity } from './call-to-action.entity';
+import { MuralAppearanceEntity } from './mural-appearance.entity';
 
 import { STATUSES } from 'src/common/constants/statuses.constant';
 import { Status } from 'src/common/types/status.type';
@@ -69,4 +71,7 @@ export class MuralEntity extends TimestampEntity {
 
   @OneToMany(() => CallToActionEntity, (cta) => cta.mural)
   ctas: CallToActionEntity[];
+
+  @OneToOne(() => MuralAppearanceEntity, (appearance) => appearance.mural)
+  appearance: MuralAppearanceEntity;
 }

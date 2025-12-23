@@ -25,6 +25,10 @@ import { CreateCallToActionDto } from './dto/call-to-action/create-call-to-actio
 import { UpdateCallToActionDto } from './dto/call-to-action/update-call-to-action.dto';
 import { CallToActionDto } from './dto/call-to-action/call-to-action.dto';
 
+import { CreateMuralAppearanceDto } from './dto/appearance/create-mural-appearance.dto';
+import { UpdateMuralAppearanceDto } from './dto/appearance/update-mural-appearance.dto';
+import { MuralAppearanceDto } from './dto/appearance/mural-appearance.dto';
+
 import { MuralsService } from './murals.service';
 
 import { AuthRequest } from 'src/common/interfaces/auth-request.interface';
@@ -32,23 +36,6 @@ import { AuthRequest } from 'src/common/interfaces/auth-request.interface';
 @Controller('murals')
 export class MuralsController {
   constructor(private readonly muralsService: MuralsService) {}
-
-  @Get(':muralName')
-  getMural(
-    @Param('muralName') muralName: string,
-    @Query(
-      'getMainCollectionResources',
-      new DefaultValuePipe(false),
-      ParseBoolPipe,
-    )
-    getMainCollectionResources: boolean,
-  ): Promise<MuralResponseDto> {
-    return this.muralsService.find(
-      muralName,
-      getMainCollectionResources,
-      false,
-    );
-  }
 
   @UseGuards(JwtAuthGuard)
   @Post('create')
@@ -98,6 +85,41 @@ export class MuralsController {
     return this.muralsService.updateCallToAction(
       callToActionId,
       updateCallToActionDto,
+    );
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('appearance/create/:muralId')
+  async createMuralAppearance(
+    @Param('muralId', new ParseUUIDPipe()) muralId: string,
+    @Body() createAppearanceDto: CreateMuralAppearanceDto,
+  ): Promise<MuralAppearanceDto> {
+    return this.muralsService.createAppearance(muralId, createAppearanceDto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Put('appearance/update/:muralId')
+  async updateMuralAppearance(
+    @Param('muralId', new ParseUUIDPipe()) muralId: string,
+    @Body() updateAppearanceDto: UpdateMuralAppearanceDto,
+  ): Promise<MuralAppearanceDto> {
+    return this.muralsService.updateAppearance(muralId, updateAppearanceDto);
+  }
+
+  @Get(':muralName')
+  getMural(
+    @Param('muralName') muralName: string,
+    @Query(
+      'getMainCollectionResources',
+      new DefaultValuePipe(false),
+      ParseBoolPipe,
+    )
+    getMainCollectionResources: boolean,
+  ): Promise<MuralResponseDto> {
+    return this.muralsService.find(
+      muralName,
+      getMainCollectionResources,
+      false,
     );
   }
 }
