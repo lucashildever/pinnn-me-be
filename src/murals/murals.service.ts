@@ -23,6 +23,7 @@ import { MuralEntity } from './entities/mural.entity';
 import { MuralAppearanceEntity } from './entities/mural-appearance.entity';
 import { CallToActionDto } from './dto/call-to-action/call-to-action.dto';
 import { CallToActionEntity } from './entities/call-to-action.entity';
+import { FormSubmissionEntity } from './entities/form-submission.entity';
 import { DisplayElementEntity } from 'src/common/entities/display-element.entity';
 import { UpdateCallToActionDto } from './dto/call-to-action/update-call-to-action.dto';
 import { CreateCallToActionDto } from './dto/call-to-action/create-call-to-action.dto';
@@ -41,6 +42,8 @@ export class MuralsService {
     private readonly displayElementRepository: Repository<DisplayElementEntity>,
     @InjectRepository(MuralAppearanceEntity)
     private readonly appearanceRepository: Repository<MuralAppearanceEntity>,
+    @InjectRepository(FormSubmissionEntity)
+    private readonly formSubmissionsRepository: Repository<FormSubmissionEntity>,
 
     private readonly collectionsService: CollectionsService,
     private readonly credentialsService: CredentialsService,
@@ -117,7 +120,7 @@ export class MuralsService {
       id: cta.id,
       content: cta.displayElement.content,
       iconConfig: cta.displayElement.iconConfig,
-      callToActionConfig: cta.callToActionConfig,
+      config: cta.config,
     }));
 
     if (mappedCtas.length > 0) {
@@ -339,7 +342,7 @@ export class MuralsService {
     const callToAction = this.callToActionsRepository.create({
       muralId: muralId,
       displayElementId: savedDisplayElement.id,
-      callToActionConfig: createCallToActionDto.callToActionConfig,
+      config: createCallToActionDto.config,
     });
 
     const savedCallToAction =
@@ -355,7 +358,7 @@ export class MuralsService {
       id: createdCallToAction.id,
       content: createdCallToAction.displayElement.content,
       iconConfig: createdCallToAction.displayElement.iconConfig,
-      callToActionConfig: createdCallToAction.callToActionConfig,
+      config: createdCallToAction.config,
     };
   }
 
@@ -394,9 +397,9 @@ export class MuralsService {
       );
     }
 
-    if (updateCallToActionDto.callToActionConfig !== undefined) {
+    if (updateCallToActionDto.config !== undefined) {
       const callToActionUpdateData: Partial<CallToActionEntity> = {
-        callToActionConfig: updateCallToActionDto.callToActionConfig,
+        config: updateCallToActionDto.config,
       };
 
       await this.callToActionsRepository.update(
@@ -414,7 +417,7 @@ export class MuralsService {
       id: callToAction.id,
       content: callToAction.displayElement.content,
       iconConfig: callToAction.displayElement.iconConfig,
-      callToActionConfig: callToAction.callToActionConfig,
+      config: callToAction.config,
     };
   }
 
@@ -493,5 +496,33 @@ export class MuralsService {
       coverImageUrl: updatedAppearance.coverImageUrl,
       themeConfig: updatedAppearance.themeConfig,
     };
+  }
+
+  async submitFormResponse(
+    callToActionId: string,
+    data: Record<string, any>,
+    submitterIp?: string,
+  ): Promise<FormSubmissionEntity> {
+    const cta = await this.callToActionsRepository.findOne({
+      where: { id: callToActionId },
+    });
+
+    if (!cta) {
+      throw new NotFoundException(
+        `CTA com ID ${callToActionId} não encontrado`,
+      );
+    }
+
+    if (cta.config.type !== 'form') {
+      throw new BadRequestException('Este CTA não é do tipo formulário');
+    }
+
+    const submission = this.formSubmissionsRepository.create({
+      callToActionId,
+      data,
+      submitterIp,
+    });
+
+    return this.formSubmissionsRepository.save(submission);
   }
 }

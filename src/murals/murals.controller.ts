@@ -1,4 +1,5 @@
 import {
+  Ip,
   Req,
   Put,
   Get,
@@ -24,6 +25,7 @@ import { MuralDto } from './dto/mural.dto';
 import { CreateCallToActionDto } from './dto/call-to-action/create-call-to-action.dto';
 import { UpdateCallToActionDto } from './dto/call-to-action/update-call-to-action.dto';
 import { CallToActionDto } from './dto/call-to-action/call-to-action.dto';
+import { CreateFormSubmissionDto } from './dto/call-to-action/create-form-submission.dto';
 
 import { CreateMuralAppearanceDto } from './dto/appearance/create-mural-appearance.dto';
 import { UpdateMuralAppearanceDto } from './dto/appearance/update-mural-appearance.dto';
@@ -120,6 +122,19 @@ export class MuralsController {
       muralName,
       getMainCollectionResources,
       false,
+    );
+  }
+
+  @Post('cta/:ctaId/submit')
+  async submitFormResponse(
+    @Param('ctaId', new ParseUUIDPipe()) ctaId: string,
+    @Body() createFormSubmissionDto: CreateFormSubmissionDto,
+    @Ip() ip: string,
+  ) {
+    return this.muralsService.submitFormResponse(
+      ctaId,
+      createFormSubmissionDto.data,
+      ip,
     );
   }
 }

@@ -2,10 +2,13 @@ import {
   IsIn,
   IsUrl,
   IsString,
+  IsNumber,
   IsNotEmpty,
+  IsOptional,
   ValidateIf,
   ValidateNested,
   MaxLength,
+  Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -58,4 +61,24 @@ export class VariantConfigDto {
   @ValidateNested()
   @Type(() => EmbedConfigDto)
   embedConfig?: EmbedConfigDto;
+
+  /**
+   * Original filename of the downloadable file.
+   * Optional for now - will be populated by CDN/storage service when configured.
+   */
+  @ValidateIf((o) => o.type === 'download')
+  @IsOptional()
+  @IsString()
+  @MaxLength(255, { message: 'File name must not exceed 255 characters' })
+  fileName?: string;
+
+  /**
+   * File size in bytes.
+   * Optional for now - will be populated by CDN/storage service when configured.
+   */
+  @ValidateIf((o) => o.type === 'download')
+  @IsOptional()
+  @IsNumber()
+  @Min(0, { message: 'File size must be a positive number' })
+  fileSize?: number;
 }

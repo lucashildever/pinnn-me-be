@@ -13,5 +13,5 @@ export class CallToActionDto extends DisplayElementDto {
 
   @ValidateNested()
   @Type(() => CallToActionConfigValidator)
-  callToActionConfig: CallToActionConfig;
+  config: CallToActionConfig;
 }

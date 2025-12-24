@@ -7,6 +7,7 @@ import { MuralEntity } from './entities/mural.entity';
 
 import { CallToActionEntity } from './entities/call-to-action.entity';
 import { MuralAppearanceEntity } from './entities/mural-appearance.entity';
+import { FormSubmissionEntity } from './entities/form-submission.entity';
 import { CredentialsModule } from 'src/credentials/credentials.module';
 import { CollectionsModule } from 'src/collections/collections.module';
 import { CommonModule } from 'src/common/common.module';
@@ -20,6 +21,7 @@ import { ResourcesModule } from 'src/resources/resources.module';
       MuralEntity,
       CallToActionEntity,
       MuralAppearanceEntity,
+      FormSubmissionEntity,
     ]),
     CredentialsModule,
     CollectionsModule,

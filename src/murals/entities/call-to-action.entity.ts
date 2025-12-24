@@ -40,5 +40,5 @@ export class CallToActionEntity extends TimestampEntity {
     type: 'json',
     nullable: false,
   })
-  callToActionConfig: CallToActionConfig;
+  config: CallToActionConfig;
 }
