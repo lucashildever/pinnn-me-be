@@ -9,9 +9,13 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { CollectionResponseDto } from './dto/collection-response.dto';
 import { CreateCollectionDto } from './dto/create-collection.dto';
 import { UpdateCollectionDto } from './dto/update-collection.dto';
+import { PinResourceDto } from './dto/pin-resource.dto';
+import { ReorderPinnedResourceDto } from './dto/reorder-pinned-resource.dto';
 
 import { DisplayElementEntity } from 'src/common/entities/display-element.entity';
 import { CollectionEntity } from './entities/collection.entity';
+import { PinnedResourceEntity } from './entities/pinned-resource.entity';
+import { ResourceEntity } from 'src/resources/entities/resource.entity';
 import { MuralEntity } from 'src/murals/entities/mural.entity';
 
 import { FractionalIndexingService } from 'src/common/services/fractional-indexing.service';
@@ -23,6 +27,9 @@ export class CollectionsService {
     @InjectRepository(CollectionEntity)
     private readonly collectionsRepository: Repository<CollectionEntity>,
 
+    @InjectRepository(PinnedResourceEntity)
+    private readonly pinnedResourcesRepository: Repository<PinnedResourceEntity>,
+
     private readonly fractionalIndexingService: FractionalIndexingService,
     private readonly cacheService: CacheService,
     private readonly dataSource: DataSource,
@@ -33,6 +40,18 @@ export class CollectionsService {
   private readonly COLLECTION_MAIN_CACHE_KEY = (muralId: string) =>
     `collections:mural:${muralId}:main`;
   private readonly CACHE_TTL = 300;
+
+  async findByIdOrFail(collectionId: string): Promise<CollectionEntity> {
+    const collection = await this.collectionsRepository.findOne({
+      where: { id: collectionId },
+    });
+
+    if (!collection) {
+      throw new NotFoundException(`Collection ${collectionId} not found`);
+    }
+
+    return collection;
+  }
 
   async findAll(
     muralId: string,
@@ -222,7 +241,6 @@ export class CollectionsService {
         );
       }
 
-      // Atualizar DisplayElement se fornecido
       if (updateCollectionDto.displayElement) {
         await manager.update(
           DisplayElementEntity,
@@ -234,7 +252,6 @@ export class CollectionsService {
         );
       }
 
-      // Atualizar Collection (apenas campos da própria collection)
       const { displayElement, ...collectionUpdateData } = updateCollectionDto;
       if (Object.keys(collectionUpdateData).length > 0) {
         await manager.update(
@@ -471,5 +488,134 @@ export class CollectionsService {
   async invalidateCache(muralId: string): Promise<void> {
     await this.cacheService.del(this.COLLECTION_LIST_CACHE_KEY(muralId));
     await this.cacheService.del(this.COLLECTION_MAIN_CACHE_KEY(muralId));
+  }
+
+  // Pinned Resources
+
+  async pinResource(
+    collectionId: string,
+    pinResourceDto: PinResourceDto,
+  ): Promise<{ id: string; order: string }> {
+    return await this.dataSource.transaction(async (manager) => {
+      const resource = await manager
+        .createQueryBuilder(ResourceEntity, 'resource')
+        .where('resource.id = :resourceId', {
+          resourceId: pinResourceDto.resourceId,
+        })
+        .andWhere('resource.collectionId = :collectionId', { collectionId })
+        .getOne();
+
+      if (!resource) {
+        throw new NotFoundException(
+          `Resource not found or does not belong to this collection`,
+        );
+      }
+
+      const existingPin = await manager
+        .createQueryBuilder(PinnedResourceEntity, 'pin')
+        .where('pin.collectionId = :collectionId', { collectionId })
+        .andWhere('pin.resourceId = :resourceId', {
+          resourceId: pinResourceDto.resourceId,
+        })
+        .getOne();
+
+      if (existingPin) {
+        throw new BadRequestException('Resource is already pinned');
+      }
+
+      const highestOrderResult = await manager
+        .createQueryBuilder(PinnedResourceEntity, 'pin')
+        .select('pin.order', 'order')
+        .where('pin.collectionId = :collectionId', { collectionId })
+        .orderBy('pin.order', 'DESC')
+        .limit(1)
+        .getRawOne<{ order: string }>();
+
+      const highestKey = highestOrderResult?.order ?? null;
+      const nextOrderKey = this.fractionalIndexingService.generateKeyBetween(
+        highestKey,
+        null,
+      );
+
+      const pinnedResource = manager.create(PinnedResourceEntity, {
+        collectionId,
+        resourceId: pinResourceDto.resourceId,
+        order: nextOrderKey,
+      });
+
+      const saved = await manager.save(pinnedResource);
+
+      return { id: saved.id, order: saved.order };
+    });
+  }
+
+  async unpinResource(
+    collectionId: string,
+    resourceId: string,
+  ): Promise<{ message: string }> {
+    const pinnedResource = await this.pinnedResourcesRepository.findOne({
+      where: { collectionId, resourceId },
+    });
+
+    if (!pinnedResource) {
+      throw new NotFoundException('Pinned resource not found');
+    }
+
+    await this.pinnedResourcesRepository.remove(pinnedResource);
+
+    return { message: 'Resource unpinned successfully' };
+  }
+
+  async reorderPinnedResource(
+    pinnedResourceId: string,
+    reorderDto: ReorderPinnedResourceDto,
+  ): Promise<{ message: string }> {
+    return await this.dataSource.transaction(async (manager) => {
+      const pinnedResource = await manager
+        .createQueryBuilder(PinnedResourceEntity, 'pin')
+        .where('pin.id = :pinnedResourceId', { pinnedResourceId })
+        .getOne();
+
+      if (!pinnedResource) {
+        throw new NotFoundException('Pinned resource not found');
+      }
+
+      const existingWithSameOrder = await manager
+        .createQueryBuilder(PinnedResourceEntity, 'pin')
+        .where('pin.collectionId = :collectionId', {
+          collectionId: pinnedResource.collectionId,
+        })
+        .andWhere('pin.id != :pinnedResourceId', { pinnedResourceId })
+        .andWhere('pin.order = :newOrder', { newOrder: reorderDto.newOrder })
+        .getOne();
+
+      if (existingWithSameOrder) {
+        throw new BadRequestException('Order position already exists');
+      }
+
+      await manager.update(
+        PinnedResourceEntity,
+        { id: pinnedResourceId },
+        { order: reorderDto.newOrder },
+      );
+
+      return { message: 'Pinned resource reordered successfully' };
+    });
+  }
+
+  async getPinnedResourcesInfo(
+    collectionId: string,
+  ): Promise<{ resourceId: string; pinnedId: string; pinnedOrder: string }[]> {
+    const pinnedResources = await this.pinnedResourcesRepository.find({
+      where: { collectionId },
+      select: ['id', 'resourceId', 'order'],
+      order: { order: 'DESC' },
+    });
+
+    return pinnedResources.map((pin) => ({
+      resourceId: pin.resourceId,
+      pinnedId: pin.id,
+      pinnedOrder: pin.order,
+    }));
   }
 }

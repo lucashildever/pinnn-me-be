@@ -10,6 +10,7 @@ import { ResourceEntity } from './entities/resource.entity';
 import { ResourceMetaEntity } from './entities/resource-meta.entity';
 import { PinsService } from 'src/pins/pins.service';
 import { CollectionEntity } from 'src/collections/entities/collection.entity';
+import { CollectionsService } from 'src/collections/collections.service';
 import { FractionalIndexingService } from 'src/common/services/fractional-indexing.service';
 import { PaginationQueryDto } from 'src/common/dto/pagination/pagination-query.dto';
 import { PaginatedResourcesResponseDto } from './dto/paginated-resources-response.dto';
@@ -44,6 +45,7 @@ export class ResourcesService {
     private readonly dataSource: DataSource,
     private readonly subscriptionsService: SubscriptionsService,
     private readonly plansService: PlansService,
+    private readonly collectionsService: CollectionsService,
   ) {}
 
   async findResources(
@@ -53,100 +55,176 @@ export class ResourcesService {
     const { page = 1, limit = 5 } = paginationQueryDto;
     const skip = (page - 1) * limit;
 
-    // Get collection to know the current mural
-    const collection = await this.dataSource
-      .getRepository(CollectionEntity)
-      .findOne({ where: { id: collectionId } });
+    const collection =
+      await this.collectionsService.findByIdOrFail(collectionId);
+    const currentMuralId = collection.muralId;
 
-    const currentMuralId = collection?.muralId;
+    const pinnedInfo =
+      await this.collectionsService.getPinnedResourcesInfo(collectionId);
+    const pinnedResourceIds = pinnedInfo.map((p) => p.resourceId);
+    const pinnedMap = new Map(
+      pinnedInfo.map((p) => [
+        p.resourceId,
+        { id: p.pinnedId, order: p.pinnedOrder },
+      ]),
+    );
 
+    // Query pinned resources
+    let pinnedResourceEntities: ResourceEntity[] = [];
+    if (pinnedResourceIds.length > 0) {
+      pinnedResourceEntities = await this.resourcesRepository
+        .createQueryBuilder('resource')
+        .leftJoinAndSelect('resource.resourceMeta', 'resourceMeta')
+        .where('resource.id IN (:...pinnedIds)', {
+          pinnedIds: pinnedResourceIds,
+        })
+        .getMany();
+
+      pinnedResourceEntities.sort((a, b) => {
+        return (
+          pinnedResourceIds.indexOf(a.id) - pinnedResourceIds.indexOf(b.id)
+        );
+      });
+    }
+
+    // Query regular (non-pinned) resources
     const queryBuilder = this.resourcesRepository
       .createQueryBuilder('resource')
       .leftJoinAndSelect('resource.resourceMeta', 'resourceMeta')
-      .where('resource.collectionId = :collectionId', { collectionId })
-      .orderBy('resource.order', 'DESC')
-      .skip(skip)
-      .take(limit);
+      .where('resource.collectionId = :collectionId', { collectionId });
 
-    const [resources, total] = await queryBuilder.getManyAndCount();
+    if (pinnedResourceIds.length > 0) {
+      queryBuilder.andWhere('resource.id NOT IN (:...pinnedIds)', {
+        pinnedIds: pinnedResourceIds,
+      });
+    }
 
-    const resourceIds = resources.map((r) => r.id);
-    const [pinsByResource, pinCounts] = await Promise.all([
-      this.pinsService.findBatchPreviews(resourceIds),
-      this.pinsService.getPinCountsByResourceIds(resourceIds),
+    queryBuilder.orderBy('resource.order', 'DESC').skip(skip).take(limit);
+
+    const [regularResources, totalNonPinned] =
+      await queryBuilder.getManyAndCount();
+
+    const allPinnedIds = pinnedResourceEntities.map((r) => r.id);
+
+    const [pinnedPinsByResource, pinnedPinCounts] = await Promise.all([
+      this.pinsService.findBatchPreviews(allPinnedIds),
+      this.pinsService.getPinCountsByResourceIds(allPinnedIds),
     ]);
 
-    const transformedResources = await Promise.all(
-      resources.map(async (resource) => {
-        const pins = pinsByResource.get(resource.id) || [];
-        const totalPins = pinCounts.get(resource.id) || pins.length;
+    const transformedPinnedResources = await Promise.all(
+      pinnedResourceEntities.map(async (resource) => {
+        const pins = pinnedPinsByResource.get(resource.id) || [];
+        const totalPins = pinnedPinCounts.get(resource.id) || pins.length;
+        const pinnedData = pinnedMap.get(resource.id)!;
 
-        // Enrich history with preview if exists
-        let enrichedHistory = resource.resourceMeta?.history;
-        let ownerPreview;
-        if (enrichedHistory && enrichedHistory.length > 0 && currentMuralId) {
-          const result = await this.enrichHistoryWithPreview(
-            enrichedHistory,
-            currentMuralId,
-            collectionId,
-          );
-          enrichedHistory = result.entries;
-          ownerPreview = result.ownerPreview;
-        }
-
-        const meta = resource.resourceMeta
-          ? {
-              sharedResourceId: resource.resourceMeta.sharedResourceId,
-              firstResourceId: resource.resourceMeta.firstResourceId,
-              groupName: resource.resourceMeta.groupName,
-              inheritedPinsTotal: resource.resourceMeta.inheritedPinsTotal,
-              history: enrichedHistory,
-              ownerPreview,
-            }
-          : undefined;
-
-        // Enrich history of individual pins
-        let pinsWithEnrichedHistory = pins;
-        if (currentMuralId) {
-          pinsWithEnrichedHistory = await this.enrichPinsMetaHistory(
-            pins,
-            currentMuralId,
-            collectionId,
-          );
-        }
-
-        // Apply enrichment
-        const { pins: enrichedPins, fromShared } =
-          await this.enrichResourceWithSharedPins(
-            { meta },
-            pinsWithEnrichedHistory,
-          );
+        const resourceDto = await this.transformResourceToDto(
+          resource,
+          pins,
+          totalPins,
+          currentMuralId,
+          collectionId,
+        );
 
         return {
-          id: resource.id,
-          order: resource.order,
-          type: this.defineResourceType(meta, pins),
-          pins: {
-            data: enrichedPins,
-            pagination: {
-              currentPage: 1,
-              totalItems: totalPins,
-              itemsPerPage: DEFAULT_ITEMS_LIMIT,
-            },
-          },
-          ...(fromShared ? { fromShared } : {}),
-          meta,
+          id: pinnedData.id,
+          order: pinnedData.order,
+          resource: resourceDto,
         };
       }),
     );
 
+    const regularIds = regularResources.map((r) => r.id);
+
+    const [regularPinsByResource, regularPinCounts] = await Promise.all([
+      this.pinsService.findBatchPreviews(regularIds),
+      this.pinsService.getPinCountsByResourceIds(regularIds),
+    ]);
+
+    const transformedRegularResources = await Promise.all(
+      regularResources.map(async (resource) => {
+        const pins = regularPinsByResource.get(resource.id) || [];
+        const totalPins = regularPinCounts.get(resource.id) || pins.length;
+
+        return this.transformResourceToDto(
+          resource,
+          pins,
+          totalPins,
+          currentMuralId,
+          collectionId,
+        );
+      }),
+    );
+
     return {
-      resources: transformedResources,
+      pinnedResources: transformedPinnedResources,
+      resources: transformedRegularResources,
       pagination: {
         currentPage: page,
-        totalItems: total,
+        totalItems: totalNonPinned,
         itemsPerPage: limit,
       },
+    };
+  }
+
+  private async transformResourceToDto(
+    resource: ResourceEntity,
+    pins: PinDto[],
+    totalPins: number,
+    currentMuralId: string,
+    collectionId: string,
+  ): Promise<ResourceDto> {
+    let enrichedHistory = resource.resourceMeta?.history;
+    let ownerPreview;
+    if (enrichedHistory && enrichedHistory.length > 0 && currentMuralId) {
+      const result = await this.enrichHistoryWithPreview(
+        enrichedHistory,
+        currentMuralId,
+        collectionId,
+      );
+      enrichedHistory = result.entries;
+      ownerPreview = result.ownerPreview;
+    }
+
+    const meta = resource.resourceMeta
+      ? {
+          sharedResourceId: resource.resourceMeta.sharedResourceId,
+          firstResourceId: resource.resourceMeta.firstResourceId,
+          groupName: resource.resourceMeta.groupName,
+          inheritedPinsTotal: resource.resourceMeta.inheritedPinsTotal,
+          history: enrichedHistory,
+          ownerPreview,
+        }
+      : undefined;
+
+    let pinsWithEnrichedHistory = pins;
+    if (currentMuralId) {
+      pinsWithEnrichedHistory = await this.enrichPinsMetaHistory(
+        pins,
+        currentMuralId,
+        collectionId,
+      );
+    }
+
+    const { pins: enrichedPins, fromShared } =
+      await this.enrichResourceWithSharedPins(
+        { meta },
+        pinsWithEnrichedHistory,
+      );
+
+    return {
+      id: resource.id,
+      order: resource.order,
+      type: this.defineResourceType(meta, pins),
+      pins: {
+        data: enrichedPins,
+        pagination: {
+          currentPage: 1,
+          totalItems: totalPins,
+          itemsPerPage: DEFAULT_ITEMS_LIMIT,
+        },
+      },
+      ...(fromShared ? { fromShared } : {}),
+      meta,
     };
   }
 

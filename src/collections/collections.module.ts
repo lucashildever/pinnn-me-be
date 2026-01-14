@@ -4,13 +4,14 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { CollectionsController } from './collections.controller';
 import { CollectionsService } from './collections.service';
 import { CollectionEntity } from './entities/collection.entity';
+import { PinnedResourceEntity } from './entities/pinned-resource.entity';
 
 import { CommonModule } from 'src/common/common.module';
 import { CacheModule } from 'src/cache/cache.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([CollectionEntity]),
+    TypeOrmModule.forFeature([CollectionEntity, PinnedResourceEntity]),
     CacheModule,
     CommonModule,
   ],
