@@ -3,6 +3,10 @@ export interface AuthResponseDto {
   user: AuthenticatedProfileDto;
 }
 
+export interface ValidateResponseDto {
+  user: AuthenticatedProfileDto;
+}
+
 export interface AuthenticatedProfileDto {
   id: string;
   email: string;

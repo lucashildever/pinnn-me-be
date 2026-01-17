@@ -8,7 +8,7 @@ import { SubscriptionsService } from 'src/subscriptions/subscriptions.service';
 import { MuralsService } from 'src/murals/murals.service';
 
 import { AuthCredentialsDto } from './dto/auth-credentials.dto';
-import { AuthResponseDto } from './dto/auth-response.dto';
+import { AuthResponseDto, ValidateResponseDto } from './dto/auth-response.dto';
 
 @Injectable()
 export class AuthService {
@@ -78,6 +78,24 @@ export class AuthService {
 
     return {
       access_token: this.jwtService.sign(tokenPayload),
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        activeMuralId: user.activeMuralId!,
+      },
+    };
+  }
+
+  async getValidatedUser(userId: string): Promise<ValidateResponseDto> {
+    const user = await this.usersService.findOrFail(userId, true, [
+      'id',
+      'username',
+      'email',
+      'activeMuralId',
+    ]);
+
+    return {
       user: {
         id: user.id,
         email: user.email,

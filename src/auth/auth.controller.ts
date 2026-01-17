@@ -1,8 +1,9 @@
-import { Body, Controller, Post, Get, UseGuards } from '@nestjs/common';
+import { Body, Controller, Post, Get, UseGuards, Req } from '@nestjs/common';
 import { JwtAuthGuard } from './guards/jwt-auth-guard';
 import { AuthService } from './auth.service';
 import { AuthCredentialsDto } from './dto/auth-credentials.dto';
-import { AuthResponseDto } from './dto/auth-response.dto';
+import { AuthResponseDto, ValidateResponseDto } from './dto/auth-response.dto';
+import { AuthRequest } from 'src/common/interfaces/auth-request.interface';
 
 @Controller('auth')
 export class AuthController {
@@ -24,7 +25,7 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Get('validate')
-  async validate(): Promise<{ success: boolean }> {
-    return { success: true };
+  async validate(@Req() req: AuthRequest): Promise<ValidateResponseDto> {
+    return this.authService.getValidatedUser(req.user.id);
   }
 }

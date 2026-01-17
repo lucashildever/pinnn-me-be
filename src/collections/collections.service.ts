@@ -113,7 +113,6 @@ export class CollectionsService {
         .createQueryBuilder(MuralEntity, 'mural')
         .select(['mural.id', 'mural.name'])
         .where('mural.id = :id', { id: muralId })
-        .andWhere('mural.status = :status', { status: 'active' })
         .getOne();
 
       if (!mural) {
@@ -126,7 +125,6 @@ export class CollectionsService {
           CollectionEntity,
           {
             muralId: mural.id,
-            status: 'active',
           },
           { isMain: false },
         );
@@ -136,7 +134,6 @@ export class CollectionsService {
         .createQueryBuilder(CollectionEntity, 'collection')
         .select('collection.order', 'order')
         .where('collection.muralId = :muralId', { muralId: mural.id })
-        .andWhere('collection.status = :status', { status: 'active' })
         .orderBy('collection.order', 'DESC')
         .limit(1)
         .getRawOne<{ order: string }>();
