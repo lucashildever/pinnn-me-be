@@ -207,6 +207,19 @@ export class UsersService {
     return (await this.findOrFail(userId, false, ['email'])).email;
   }
 
+  async setActiveMural(userId: string, muralId: string): Promise<void> {
+    await this.usersRepository.update(
+      { id: userId },
+      { activeMuralId: muralId },
+    );
+    await this.cacheService.del(this.USER_CACHE_KEY(userId));
+  }
+
+  async getActiveMural(userId: string): Promise<string> {
+    const user = await this.findOrFail(userId, true, ['activeMuralId']);
+    return user.activeMuralId!;
+  }
+
   async findOrFail(
     identifier: string,
     onlyActive: boolean = true,

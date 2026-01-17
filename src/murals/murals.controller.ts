@@ -40,6 +40,29 @@ export class MuralsController {
   constructor(private readonly muralsService: MuralsService) {}
 
   @UseGuards(JwtAuthGuard)
+  @Get('user')
+  getUserMurals(@Req() request: AuthRequest): Promise<{
+    murals: {
+      id: string;
+      name: string;
+      displayName: string;
+      isActive: boolean;
+    }[];
+    activeMuralId: string;
+  }> {
+    return this.muralsService.findAllByUser(request.user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Put('active/:muralId')
+  setActiveMural(
+    @Req() request: AuthRequest,
+    @Param('muralId', new ParseUUIDPipe()) muralId: string,
+  ): Promise<{ message: string; activeMuralId: string }> {
+    return this.muralsService.setActiveMuralForUser(request.user.id, muralId);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Post('create')
   createMural(
     @Req() request: AuthRequest,
@@ -54,7 +77,7 @@ export class MuralsController {
     @Param('muralId', new ParseUUIDPipe()) muralId: string,
     @Body() DeleteMuralDto: DeleteMuralDto,
   ): Promise<{ message: string }> {
-    return this.muralsService.softDelete(muralId, DeleteMuralDto);
+    return this.muralsService.delete(muralId, DeleteMuralDto);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -118,11 +141,7 @@ export class MuralsController {
     )
     getMainCollectionResources: boolean,
   ): Promise<MuralResponseDto> {
-    return this.muralsService.find(
-      muralName,
-      getMainCollectionResources,
-      false,
-    );
+    return this.muralsService.find(muralName, getMainCollectionResources);
   }
 
   @Post('cta/:ctaId/submit')

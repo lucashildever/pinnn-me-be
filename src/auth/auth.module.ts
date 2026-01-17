@@ -7,6 +7,7 @@ import { JwtModule } from '@nestjs/jwt';
 
 import { CredentialsModule } from 'src/credentials/credentials.module';
 import { UsersModule } from 'src/users/users.module';
+import { MuralsModule } from 'src/murals/murals.module';
 
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
@@ -30,6 +31,7 @@ import { SubscriptionsModule } from 'src/subscriptions/subscriptions.module';
     UsersModule,
     CredentialsModule,
     SubscriptionsModule,
+    MuralsModule,
   ],
   providers: [AuthService, JwtStrategy, RolesGuard, SuperAdminGuard],
   exports: [AuthService, RolesGuard, SuperAdminGuard],

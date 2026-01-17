@@ -5,7 +5,6 @@ import {
   JoinColumn,
   OneToMany,
   OneToOne,
-  UpdateDateColumn,
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { TimestampEntity } from 'src/common/entities/timestamp.entity';
@@ -14,9 +13,6 @@ import { CollectionEntity } from '../../collections/entities/collection.entity';
 
 import { CallToActionEntity } from './call-to-action.entity';
 import { MuralAppearanceEntity } from './mural-appearance.entity';
-
-import { STATUSES } from 'src/common/constants/statuses.constant';
-import { Status } from 'src/common/types/status.type';
 
 import { PLAN_TYPES } from 'src/plans/constants/plan-types.constant';
 import { PlanType } from 'src/plans/types/plan-type.type';
@@ -58,16 +54,6 @@ export class MuralEntity extends TimestampEntity {
     nullable: false,
   })
   muralPlan: PlanType;
-
-  @Column({
-    type: 'enum',
-    enum: STATUSES,
-    default: 'active',
-  })
-  status: Status;
-
-  @UpdateDateColumn({ type: 'timestamp' })
-  deletedAt: Date;
 
   @OneToMany(() => CallToActionEntity, (cta) => cta.mural)
   ctas: CallToActionEntity[];

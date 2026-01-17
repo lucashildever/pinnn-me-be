@@ -2,6 +2,8 @@ import {
   Entity,
   Column,
   OneToMany,
+  ManyToOne,
+  JoinColumn,
   DeleteDateColumn,
   PrimaryGeneratedColumn,
 } from 'typeorm';
@@ -30,6 +32,13 @@ export class UserEntity extends TimestampEntity {
 
   @OneToMany(() => Invoice, (invoice) => invoice.user)
   invoices: Invoice[];
+
+  @Column({ type: 'uuid', nullable: true })
+  activeMuralId: string | null;
+
+  @ManyToOne(() => MuralEntity, { nullable: true })
+  @JoinColumn({ name: 'activeMuralId' })
+  activeMural: MuralEntity | null;
 
   @Column({
     type: 'varchar',

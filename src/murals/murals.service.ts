@@ -61,10 +61,62 @@ export class MuralsService {
   private readonly CACHE_TTL = 300;
   private readonly NAME_CACHE_TTL = this.CACHE_TTL / 5;
 
+  async findAllByUser(userId: string): Promise<{
+    murals: {
+      id: string;
+      name: string;
+      displayName: string;
+      isActive: boolean;
+    }[];
+    activeMuralId: string;
+  }> {
+    const murals = await this.muralsRepository.find({
+      where: { userId },
+      select: ['id', 'name', 'displayName'],
+      order: { createdAt: 'ASC' },
+    });
+
+    const activeMuralId = await this.usersService.getActiveMural(userId);
+
+    return {
+      murals: murals.map((mural) => ({
+        id: mural.id,
+        name: mural.name,
+        displayName: mural.displayName,
+        isActive: mural.id === activeMuralId,
+      })),
+      activeMuralId: activeMuralId!,
+    };
+  }
+
+  async setActiveMuralForUser(
+    userId: string,
+    muralId: string,
+  ): Promise<{ message: string; activeMuralId: string }> {
+    const mural = await this.muralsRepository.findOne({
+      where: { id: muralId },
+      select: ['id', 'userId'],
+    });
+
+    if (!mural) {
+      throw new NotFoundException('Mural not found');
+    }
+
+    if (mural.userId !== userId) {
+      throw new BadRequestException('Mural does not belong to this user');
+    }
+
+    await this.usersService.setActiveMural(userId, muralId);
+
+    return {
+      message: 'Active mural updated successfully',
+      activeMuralId: muralId,
+    };
+  }
+
   async find(
     muralName: string,
     getMainCollectionResources: boolean = false,
-    includeInactives: boolean = false,
   ): Promise<MuralResponseDto> {
     const cacheKey = this.MURAL_CACHE_KEY(
       muralName,
@@ -76,7 +128,7 @@ export class MuralsService {
       return cachedMural;
     }
 
-    const mural = await this.findOrFail(muralName, !includeInactives);
+    const mural = await this.findOrFail(muralName);
 
     const collections = (await this.collectionsService.findAll(mural.id)).map(
       (collection) => ({
@@ -155,11 +207,15 @@ export class MuralsService {
       },
     });
 
-    // Create default appearance
     const appearance = this.appearanceRepository.create({
       muralId: savedMural.id,
     });
     const savedAppearance = await this.appearanceRepository.save(appearance);
+
+    const currentActiveMural = await this.usersService.getActiveMural(userId);
+    if (!currentActiveMural) {
+      await this.usersService.setActiveMural(userId, savedMural.id);
+    }
 
     const response: MuralResponseDto = {
       id: savedMural.id,
@@ -200,12 +256,11 @@ export class MuralsService {
         'Failed to retrieve updated mural',
       );
     }
-    // clean up the old name cache
+
     await this.cacheService.del(this.MURAL_CACHE_KEY(currentMural.name, true));
     await this.cacheService.del(this.MURAL_CACHE_KEY(currentMural.name, false));
     await this.cacheService.del(this.MURAL_NAME_CACHE_KEY(currentMural.name));
 
-    // If name changed, clean up the cache for it
     if (updateMuralDto.name && updateMuralDto.name !== currentMural.name) {
       await this.cacheService.del(
         this.MURAL_CACHE_KEY(updateMuralDto.name, true),
@@ -213,7 +268,7 @@ export class MuralsService {
       await this.cacheService.del(
         this.MURAL_CACHE_KEY(updateMuralDto.name, false),
       );
-      // Clean up cache for new name availability
+
       await this.cacheService.del(
         this.MURAL_NAME_CACHE_KEY(updateMuralDto.name),
       );
@@ -231,14 +286,25 @@ export class MuralsService {
     return response;
   }
 
-  async softDelete(
+  async delete(
     muralId: string,
     deleteMuralDto: DeleteMuralDto,
   ): Promise<{ message: string }> {
-    const mural = await this.findOrFail(muralId, true, ['userId', 'name']);
+    const mural = await this.findOrFail(muralId, ['userId', 'name']);
+
+    const userMuralsCount = await this.muralsRepository.count({
+      where: { userId: mural.userId },
+    });
+
+    if (userMuralsCount <= 1) {
+      throw new BadRequestException(
+        'Cannot delete the last mural. Every account must have at least one mural.',
+      );
+    }
 
     const user = await this.usersService.findOrFail(mural.userId, true, [
       'password',
+      'activeMuralId',
     ]);
 
     await this.credentialsService.validatePassword(
@@ -246,7 +312,17 @@ export class MuralsService {
       user.password,
     );
 
-    await this.muralsRepository.update({ id: muralId }, { status: 'deleted' });
+    if (user.activeMuralId === muralId) {
+      const nextMural = await this.muralsRepository.findOne({
+        where: { userId: mural.userId },
+        order: { createdAt: 'ASC' },
+      });
+      if (nextMural && nextMural.id !== muralId) {
+        await this.usersService.setActiveMural(mural.userId, nextMural.id);
+      }
+    }
+
+    await this.muralsRepository.delete({ id: muralId });
 
     await this.cacheService.del(this.MURAL_CACHE_KEY(mural.name, true));
     await this.cacheService.del(this.MURAL_CACHE_KEY(mural.name, false));
@@ -287,7 +363,6 @@ export class MuralsService {
 
   async findOrFail(
     identifier: string,
-    onlyActive: boolean = true,
     selectFields?: string[],
   ): Promise<MuralEntity> {
     const isUUID =
@@ -295,10 +370,7 @@ export class MuralsService {
         identifier,
       );
 
-    const whereCondition = {
-      ...(isUUID ? { id: identifier } : { name: identifier }),
-      ...(onlyActive ? { status: 'active' } : {}),
-    };
+    const whereCondition = isUUID ? { id: identifier } : { name: identifier };
 
     let mural: MuralEntity | null;
 

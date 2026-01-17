@@ -7,4 +7,5 @@ export interface AuthenticatedProfileDto {
   id: string;
   email: string;
   username: string;
+  activeMuralId: string;
 }
