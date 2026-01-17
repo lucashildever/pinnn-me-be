@@ -7,8 +7,13 @@ import { Plan } from 'src/plans/entities/plan.entity';
 import { CredentialsService } from 'src/credentials/credentials.service';
 import { seedPlans } from './seeds/plans.seed';
 import { seedUsers } from './seeds/users.seed';
+import { seedMurals } from './seeds/murals.seed';
 import { seedSubscriptions } from './seeds/subscriptions.seed';
 import { Subscription } from 'src/subscriptions/entities/subscription.entity';
+import { MuralEntity } from 'src/murals/entities/mural.entity';
+import { MuralAppearanceEntity } from 'src/murals/entities/mural-appearance.entity';
+import { CollectionEntity } from 'src/collections/entities/collection.entity';
+import { DisplayElementEntity } from 'src/common/entities/display-element.entity';
 
 @Injectable()
 export class DatabaseService {
@@ -19,6 +24,14 @@ export class DatabaseService {
     private readonly plansRepository: Repository<Plan>,
     @InjectRepository(Subscription)
     private readonly subscriptionsRepository: Repository<Subscription>,
+    @InjectRepository(MuralEntity)
+    private readonly muralsRepository: Repository<MuralEntity>,
+    @InjectRepository(MuralAppearanceEntity)
+    private readonly appearanceRepository: Repository<MuralAppearanceEntity>,
+    @InjectRepository(CollectionEntity)
+    private readonly collectionsRepository: Repository<CollectionEntity>,
+    @InjectRepository(DisplayElementEntity)
+    private readonly displayElementRepository: Repository<DisplayElementEntity>,
     private readonly configService: ConfigService,
     private readonly credentialsService: CredentialsService,
   ) {}
@@ -61,13 +74,18 @@ export class DatabaseService {
     try {
       console.log('Starting seed process...');
 
-      // Seed plans first (users depend on plans via subscriptions)
       await seedPlans(this.plansRepository, this.configService);
 
-      // Seed users
       await seedUsers(this.usersRepository, this.credentialsService);
 
-      // Seed subscriptions
+      await seedMurals(
+        this.muralsRepository,
+        this.appearanceRepository,
+        this.collectionsRepository,
+        this.displayElementRepository,
+        this.usersRepository,
+      );
+
       await seedSubscriptions(
         this.subscriptionsRepository,
         this.usersRepository,
