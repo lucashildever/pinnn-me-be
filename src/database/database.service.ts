@@ -48,15 +48,19 @@ export class DatabaseService {
       await this.usersRepository.query('TRUNCATE TABLE invoices');
       await this.usersRepository.query('TRUNCATE TABLE billing_info');
       await this.usersRepository.query('TRUNCATE TABLE call_to_actions');
+      await this.usersRepository.query('TRUNCATE TABLE form_submissions');
       await this.usersRepository.query('TRUNCATE TABLE variants');
       await this.usersRepository.query('TRUNCATE TABLE pins');
       await this.usersRepository.query('TRUNCATE TABLE pin_meta');
       await this.usersRepository.query('TRUNCATE TABLE resources');
       await this.usersRepository.query('TRUNCATE TABLE resource_meta');
+      await this.usersRepository.query('TRUNCATE TABLE pinned_resources');
       await this.usersRepository.query('TRUNCATE TABLE collections');
       await this.usersRepository.query('TRUNCATE TABLE display_elements');
+      await this.usersRepository.query('TRUNCATE TABLE mural_appearances');
       await this.usersRepository.query('TRUNCATE TABLE murals');
       await this.usersRepository.query('TRUNCATE TABLE subscriptions');
+      await this.usersRepository.query('TRUNCATE TABLE refresh_tokens');
       await this.usersRepository.query('TRUNCATE TABLE users');
       await this.plansRepository.query('TRUNCATE TABLE plans');
 
