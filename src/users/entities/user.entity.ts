@@ -12,6 +12,7 @@ import { TimestampEntity } from 'src/common/entities/timestamp.entity';
 import { Subscription } from 'src/subscriptions/entities/subscription.entity';
 import { MuralEntity } from 'src/murals/entities/mural.entity';
 import { Invoice } from 'src/billings/entities/invoice.entity';
+import { RefreshToken } from 'src/auth/entities/refresh-token.entity';
 
 import { ROLES } from '../../auth/constants/roles.constant';
 import { Role } from '../../auth/types/role.type';
@@ -32,6 +33,9 @@ export class UserEntity extends TimestampEntity {
 
   @OneToMany(() => Invoice, (invoice) => invoice.user)
   invoices: Invoice[];
+
+  @OneToMany(() => RefreshToken, (refreshToken) => refreshToken.user)
+  refreshTokens: RefreshToken[];
 
   @Column({ type: 'uuid', nullable: true })
   activeMuralId: string | null;

@@ -4,7 +4,8 @@ import * as bcrypt from 'bcrypt';
 @Injectable()
 export class CredentialsService {
   async validatePassword(plaintext: string, hash: string): Promise<void> {
-    if (!bcrypt.compare(plaintext, hash)) {
+    const isValid = await bcrypt.compare(plaintext, hash);
+    if (!isValid) {
       throw new UnauthorizedException('Invalid password');
     }
   }

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ThrottlerModule } from '@nestjs/throttler';
 
 import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
 import configuration from 'config/configuration';
@@ -30,6 +31,12 @@ import { ResourcesModule } from './resources/resources.module';
       ignoreEnvFile: process.env.NODE_ENV === 'production',
       isGlobal: true,
     }),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000, // 1 minuto
+        limit: 10, // 10 requisições por minuto
+      },
+    ]),
     TypeOrmModule.forRoot({
       type: 'mysql',
       host: process.env.DB_HOST,

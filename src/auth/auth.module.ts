@@ -12,6 +12,7 @@ import { MuralsModule } from 'src/murals/murals.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { UserEntity } from 'src/users/entities/user.entity';
+import { RefreshToken } from './entities/refresh-token.entity';
 import { RolesGuard } from './guards/roles.guard';
 import { SuperAdminGuard } from './guards/super-admin.guard';
 import { SubscriptionsModule } from 'src/subscriptions/subscriptions.module';
@@ -19,7 +20,7 @@ import { SubscriptionsModule } from 'src/subscriptions/subscriptions.module';
 @Module({
   imports: [
     ConfigModule.forRoot(),
-    TypeOrmModule.forFeature([UserEntity]),
+    TypeOrmModule.forFeature([UserEntity, RefreshToken]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({

@@ -1,11 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import { AuthService } from './auth.service';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { CredentialsService } from '../credentials/credentials.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
+import { MuralsService } from '../murals/murals.service';
 import { DataSource } from 'typeorm';
 import { AuthCredentialsDto } from './dto/auth-credentials.dto';
+import { RefreshToken } from './entities/refresh-token.entity';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -29,8 +32,18 @@ describe('AuthService', () => {
     subscribeToDefault: jest.fn(),
   };
 
+  const mockMuralsService = {
+    create: jest.fn(),
+  };
+
+  const mockRefreshTokenRepository = {
+    save: jest.fn(),
+    findOne: jest.fn(),
+  };
+
+  // Transaction manager exposes save() so register() can persist the refresh token
   const mockDataSource = {
-    transaction: jest.fn((cb) => cb({} as any)), // Mock transaction to execute callback immediately
+    transaction: jest.fn((cb) => cb({ save: jest.fn() } as any)),
   };
 
   beforeEach(async () => {
@@ -41,7 +54,12 @@ describe('AuthService', () => {
         { provide: UsersService, useValue: mockUsersService },
         { provide: CredentialsService, useValue: mockCredentialsService },
         { provide: SubscriptionsService, useValue: mockSubscriptionsService },
+        { provide: MuralsService, useValue: mockMuralsService },
         { provide: DataSource, useValue: mockDataSource },
+        {
+          provide: getRepositoryToken(RefreshToken),
+          useValue: mockRefreshTokenRepository,
+        },
       ],
     }).compile();
 
@@ -69,10 +87,13 @@ describe('AuthService', () => {
 
       const accessToken = 'jwt-token';
 
+      const defaultMural = { id: 'mural-id' };
+
       mockUsersService.validateEmailDoesNotExist.mockResolvedValue(undefined);
       mockCredentialsService.hashPassword.mockResolvedValue(hashedPassword);
       mockUsersService.create.mockResolvedValue(createdUser);
       mockSubscriptionsService.subscribeToDefault.mockResolvedValue(undefined);
+      mockMuralsService.create.mockResolvedValue(defaultMural);
       mockJwtService.sign.mockReturnValue(accessToken);
 
       const result = await service.register(authCredentialsDto);
@@ -101,10 +122,12 @@ describe('AuthService', () => {
       });
       expect(result).toEqual({
         access_token: accessToken,
+        refresh_token: expect.any(String),
         user: {
           id: createdUser.id,
           email: createdUser.email,
           username: createdUser.username,
+          activeMuralId: defaultMural.id,
         },
       });
     });
