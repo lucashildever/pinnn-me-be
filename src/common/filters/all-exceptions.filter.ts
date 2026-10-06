@@ -1,17 +1,21 @@
 import {
   Catch,
+  Logger,
   HttpStatus,
   HttpException,
   ArgumentsHost,
   ExceptionFilter,
 } from '@nestjs/common';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
+  private readonly logger = new Logger(AllExceptionsFilter.name);
+
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<Request>();
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message: string | string[] = 'Internal server error';
@@ -41,6 +45,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
       errorName = exception.constructor.name;
     }
 
+    this.log(status, errorName, message, exception, request);
+
     const errorResponse: any = {
       success: false,
       message: message,
@@ -52,5 +58,31 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     response.status(status).json(errorResponse);
+  }
+
+  private log(
+    status: number,
+    errorName: string,
+    message: string | string[],
+    exception: unknown,
+    request: Request,
+  ): void {
+    const text = typeof message === 'string' ? message : message.join('; ');
+    const route = `${request.method} ${request.url}`;
+
+    if (status >= 500) {
+      this.logger.error(
+        `${errorName} [${status}] ${route}: ${text}`,
+        exception instanceof Error ? exception.stack : undefined,
+      );
+      return;
+    }
+
+    if (status >= 400 && status < 500) {
+      this.logger.warn(
+        `${errorName} [${status}] ${route}: ${text}`,
+        exception instanceof Error ? exception.stack : undefined,
+      );
+    }
   }
 }
