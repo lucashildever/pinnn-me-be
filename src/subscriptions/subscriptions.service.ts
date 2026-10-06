@@ -8,6 +8,7 @@ import { Subscription } from './entities/subscription.entity';
 import { PlansService } from 'src/plans/plans.service';
 import { Repository, EntityManager } from 'typeorm';
 import { SubscriptionStatus } from './types/subscription-status.type';
+import { SubscriptionProfileDto } from './dto/subscription-profile.dto';
 
 @Injectable()
 export class SubscriptionsService {
@@ -102,7 +103,9 @@ export class SubscriptionsService {
     }
 
     // Ensure userId is set (if we found by stripeId, it might be set, if new, we set it)
-    if (!subscription.userId) subscription.userId = data.userId;
+    if (!subscription.userId) {
+      subscription.userId = data.userId;
+    }
 
     return this.subscriptionsRepository.save(subscription);
   }
@@ -115,7 +118,10 @@ export class SubscriptionsService {
     userId: string,
     manager?: EntityManager,
   ): Promise<Subscription> {
-    const existingSubscription = await this.findUserActiveSubscription(userId);
+    const existingSubscription = await this.findUserActiveSubscription(
+      userId,
+      manager,
+    );
 
     if (existingSubscription) {
       throw new BadRequestException('User already has an active subscription');
@@ -143,10 +149,15 @@ export class SubscriptionsService {
 
   async findUserActiveSubscription(
     userId: string,
+    manager?: EntityManager,
   ): Promise<Subscription | null> {
     const activeStatuses = ['active', 'past-due', 'trialing'];
 
-    return this.subscriptionsRepository
+    const repository = manager
+      ? manager.getRepository(Subscription)
+      : this.subscriptionsRepository;
+
+    return repository
       .createQueryBuilder('subscription')
       .leftJoinAndSelect('subscription.plan', 'plan')
       .leftJoinAndSelect('subscription.user', 'user')
@@ -156,6 +167,38 @@ export class SubscriptionsService {
       })
       .orderBy('subscription.createdAt', 'DESC')
       .getOne();
+  }
+
+  /**
+   * Snapshot de assinatura usado nas respostas de autenticação
+   * (`/auth/login`, `/auth/register`, `/auth/refresh`).
+   */
+  async getAuthSubscription(
+    userId: string,
+    manager?: EntityManager,
+  ): Promise<SubscriptionProfileDto> {
+    const subscription = await this.findUserActiveSubscription(userId, manager);
+
+    const hasPro =
+      !!subscription &&
+      !!subscription.hasValidAccess() &&
+      !!subscription.isPro();
+
+    if (hasPro && subscription?.plan) {
+      return {
+        planType: 'pro',
+        limits: subscription.plan.limits,
+        features: subscription.plan.features,
+      };
+    }
+
+    const defaultPlan = await this.plansService.findDefaultPlan();
+
+    return {
+      planType: 'free',
+      limits: defaultPlan.limits,
+      features: defaultPlan.features,
+    };
   }
 
   async findUserSubscriptions(userId: string): Promise<Subscription[]> {
@@ -207,7 +250,9 @@ export class SubscriptionsService {
   async hasProAccess(userId: string): Promise<boolean> {
     const subscription = await this.findUserActiveSubscription(userId);
 
-    if (!subscription) return false;
+    if (!subscription) {
+      return false;
+    }
 
     return !!subscription.hasValidAccess() && !!subscription.isPro();
   }
@@ -234,7 +279,7 @@ export class SubscriptionsService {
     const subscription = await this.findUserActiveSubscription(userId);
 
     if (!subscription || !subscription.plan) {
-      const freePlan = await this.plansService.findByName('FREE');
+      const freePlan = await this.plansService.findDefaultPlan();
       return freePlan.features;
     }
 

@@ -207,23 +207,57 @@ export class UsersService {
     return (await this.findOrFail(userId, false, ['email'])).email;
   }
 
-  async setActiveMural(userId: string, muralId: string): Promise<void> {
-    await this.usersRepository.update(
-      { id: userId },
-      { activeMuralId: muralId },
-    );
+  async setActiveMural(
+    userId: string,
+    muralId: string,
+    manager?: EntityManager,
+  ): Promise<void> {
+    if (manager) {
+      await manager.update(
+        UserEntity,
+        { id: userId },
+        { activeMuralId: muralId },
+      );
+    } else {
+      await this.usersRepository.update(
+        { id: userId },
+        { activeMuralId: muralId },
+      );
+    }
     await this.cacheService.del(this.USER_CACHE_KEY(userId));
   }
 
-  async getActiveMural(userId: string): Promise<string> {
-    const user = await this.findOrFail(userId, true, ['activeMuralId']);
-    return user.activeMuralId!;
+  async getActiveMural(
+    userId: string,
+    manager?: EntityManager,
+  ): Promise<string | null> {
+    const repository = manager
+      ? manager.getRepository(UserEntity)
+      : this.usersRepository;
+
+    const user = await repository.findOne({
+      where: { id: userId },
+      select: ['id', 'status', 'activeMuralId'],
+    });
+
+    if (!user) {
+      const raw = await repository.query(
+        'SELECT id, status, active_mural_id FROM users WHERE id = ?',
+        [userId],
+      );
+      throw new NotFoundException(
+        `User not found! (raw: ${JSON.stringify(raw)})`,
+      );
+    }
+
+    return user.activeMuralId ?? null;
   }
 
   async findOrFail(
     identifier: string,
     onlyActive: boolean = true,
     selectFields?: string[],
+    manager?: EntityManager,
   ): Promise<UserEntity> {
     let user: UserEntity | null;
 
@@ -234,13 +268,17 @@ export class UsersService {
       ...(onlyActive ? { status: 'active' } : {}),
     };
 
+    const repository = manager
+      ? manager.getRepository(UserEntity)
+      : this.usersRepository;
+
     if (selectFields) {
-      user = await this.usersRepository.findOne({
+      user = await repository.findOne({
         where: whereCondition as FindOptionsWhere<UserEntity>,
         select: selectFields as (keyof UserEntity)[],
       });
     } else {
-      user = await this.usersRepository.findOneBy(
+      user = await repository.findOneBy(
         whereCondition as FindOptionsWhere<UserEntity>,
       );
     }

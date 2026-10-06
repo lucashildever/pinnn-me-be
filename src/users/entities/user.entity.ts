@@ -37,11 +37,11 @@ export class UserEntity extends TimestampEntity {
   @OneToMany(() => RefreshToken, (refreshToken) => refreshToken.user)
   refreshTokens: RefreshToken[];
 
-  @Column({ type: 'uuid', nullable: true })
+  @Column({ type: 'uuid', nullable: true, name: 'active_mural_id' })
   activeMuralId: string | null;
 
-  @ManyToOne(() => MuralEntity, { nullable: true })
-  @JoinColumn({ name: 'activeMuralId' })
+  @ManyToOne(() => MuralEntity, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'active_mural_id' })
   activeMural: MuralEntity | null;
 
   @Column({

@@ -5,7 +5,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, Repository } from 'typeorm';
+import {
+  FindOptionsWhere,
+  Repository,
+  EntityManager,
+  DataSource,
+} from 'typeorm';
 
 import { UpdateMuralResponseDto } from './dto/update-mural-response.dto';
 import { MuralResponseDto } from './dto/mural-response.dto';
@@ -50,6 +55,7 @@ export class MuralsService {
     private readonly cacheService: CacheService,
     private readonly usersService: UsersService,
     private readonly resourcesService: ResourcesService,
+    private readonly dataSource: DataSource,
   ) {}
 
   private readonly MURAL_CACHE_KEY = (
@@ -68,7 +74,7 @@ export class MuralsService {
       displayName: string;
       isActive: boolean;
     }[];
-    activeMuralId: string;
+    activeMuralId: string | null;
   }> {
     const murals = await this.muralsRepository.find({
       where: { userId },
@@ -85,7 +91,7 @@ export class MuralsService {
         displayName: mural.displayName,
         isActive: mural.id === activeMuralId,
       })),
-      activeMuralId: activeMuralId!,
+      activeMuralId: activeMuralId,
     };
   }
 
@@ -192,29 +198,57 @@ export class MuralsService {
     return response;
   }
 
-  async create(userId: string, muralDto: MuralDto): Promise<MuralResponseDto> {
-    await this.checkMuralNameAvailability(muralDto.name);
+  async create(
+    userId: string,
+    muralDto: MuralDto,
+    manager?: EntityManager,
+  ): Promise<MuralResponseDto> {
+    if (manager) {
+      return this.createInTransaction(userId, muralDto, manager);
+    }
 
-    const mural = this.muralsRepository.create({ userId, ...muralDto });
+    return this.dataSource.transaction((transactionManager) =>
+      this.createInTransaction(userId, muralDto, transactionManager),
+    );
+  }
 
-    const savedMural = await this.muralsRepository.save(mural);
+  private async createInTransaction(
+    userId: string,
+    muralDto: MuralDto,
+    manager: EntityManager,
+  ): Promise<MuralResponseDto> {
+    await this.checkMuralNameAvailability(muralDto.name, manager);
 
-    await this.collectionsService.create(savedMural.id, {
-      isMain: true,
-      displayElement: {
-        content: 'Main Collection',
-        iconConfig: { type: 'emoji', unicode: '📝' },
+    const mural = manager.create(MuralEntity, { userId, ...muralDto });
+
+    const savedMural = await manager.save(MuralEntity, mural);
+
+    await this.collectionsService.create(
+      savedMural.id,
+      {
+        isMain: true,
+        displayElement: {
+          content: 'Main Collection',
+          iconConfig: { type: 'emoji', unicode: '📝' },
+        },
       },
-    });
+      manager,
+    );
 
-    const appearance = this.appearanceRepository.create({
+    const appearance = manager.create(MuralAppearanceEntity, {
       muralId: savedMural.id,
     });
-    const savedAppearance = await this.appearanceRepository.save(appearance);
+    const savedAppearance = await manager.save(
+      MuralAppearanceEntity,
+      appearance,
+    );
 
-    const currentActiveMural = await this.usersService.getActiveMural(userId);
+    const currentActiveMural = await this.usersService.getActiveMural(
+      userId,
+      manager,
+    );
     if (!currentActiveMural) {
-      await this.usersService.setActiveMural(userId, savedMural.id);
+      await this.usersService.setActiveMural(userId, savedMural.id, manager);
     }
 
     const response: MuralResponseDto = {
@@ -333,32 +367,86 @@ export class MuralsService {
     };
   }
 
-  private async checkMuralNameAvailability(muralName: string): Promise<void> {
-    const cacheKey = this.MURAL_NAME_CACHE_KEY(muralName);
-    const cached = await this.cacheService.get<boolean>(cacheKey);
-
-    if (cached !== undefined) {
-      if (cached) {
-        throw new BadRequestException(
-          `Mural with name "${muralName}" already exists`,
-        );
-      }
-      return;
+  private async findMuralByName(
+    muralName: string,
+    manager?: EntityManager,
+  ): Promise<boolean> {
+    if (manager) {
+      const mural = await manager.findOne(MuralEntity, {
+        where: { name: muralName },
+      });
+      return !!mural;
     }
 
-    const existingMural = await this.muralsRepository.findOneBy({
-      name: muralName,
-    });
+    const mural = await this.muralsRepository.findOneBy({ name: muralName });
+    return !!mural;
+  }
 
-    const exists = !!existingMural;
+  private async checkMuralNameAvailability(
+    muralName: string,
+    manager?: EntityManager,
+  ): Promise<void> {
+    // Dentro de uma transação o cache pode estar defasado: vai direto ao banco.
+    if (!manager) {
+      const cached = await this.cacheService.get<boolean>(
+        this.MURAL_NAME_CACHE_KEY(muralName),
+      );
 
-    await this.cacheService.set(cacheKey, exists, this.NAME_CACHE_TTL);
+      if (cached !== undefined) {
+        if (cached) {
+          throw new BadRequestException(
+            `Mural with name "${muralName}" already exists`,
+          );
+        }
+        return;
+      }
+    }
+
+    const exists = await this.findMuralByName(muralName, manager);
+
+    if (!manager) {
+      await this.cacheService.set(
+        this.MURAL_NAME_CACHE_KEY(muralName),
+        exists,
+        this.NAME_CACHE_TTL,
+      );
+    }
 
     if (exists) {
       throw new BadRequestException(
         `Mural with name "${muralName}" already exists`,
       );
     }
+  }
+
+  /**
+   * Deriva um nome de mural livre a partir de uma base (ex.: local-part do e-mail).
+   * Usado no registro para não falhar quando o nome base já está em uso.
+   */
+  async resolveAvailableMuralName(
+    baseName: string,
+    manager?: EntityManager,
+  ): Promise<string> {
+    const sanitized = (baseName ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+    const base = sanitized || 'mural';
+
+    if (!(await this.findMuralByName(base, manager))) {
+      return base;
+    }
+
+    for (let suffix = 2; suffix <= 100; suffix++) {
+      const candidate = `${base}-${suffix}`;
+      if (!(await this.findMuralByName(candidate, manager))) {
+        return candidate;
+      }
+    }
+
+    return `${base}-${Date.now().toString(36)}`;
   }
 
   async findOrFail(

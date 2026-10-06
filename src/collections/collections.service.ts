@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, EntityManager } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 
 import { CollectionResponseDto } from './dto/collection-response.dto';
@@ -107,8 +107,11 @@ export class CollectionsService {
   async create(
     muralId: string,
     createCollectionDto: CreateCollectionDto,
+    parentManager?: EntityManager,
   ): Promise<CollectionResponseDto> {
-    return await this.dataSource.transaction(async (manager) => {
+    const execute = async (
+      manager: EntityManager,
+    ): Promise<CollectionResponseDto> => {
       const mural = await manager
         .createQueryBuilder(MuralEntity, 'mural')
         .select(['mural.id', 'mural.name'])
@@ -188,11 +191,17 @@ export class CollectionsService {
         },
       };
 
-      await this.cacheService.del(this.COLLECTION_LIST_CACHE_KEY(mural.name));
-      await this.cacheService.del(this.COLLECTION_MAIN_CACHE_KEY(mural.name));
+      await this.cacheService.del(this.COLLECTION_LIST_CACHE_KEY(muralId));
+      await this.cacheService.del(this.COLLECTION_MAIN_CACHE_KEY(muralId));
 
       return responseDto;
-    });
+    };
+
+    if (parentManager) {
+      return execute(parentManager);
+    }
+
+    return this.dataSource.transaction(execute);
   }
 
   async update(
@@ -289,10 +298,10 @@ export class CollectionsService {
       };
 
       await this.cacheService.del(
-        this.COLLECTION_LIST_CACHE_KEY(collection.mural.name),
+        this.COLLECTION_LIST_CACHE_KEY(collection.muralId),
       );
       await this.cacheService.del(
-        this.COLLECTION_MAIN_CACHE_KEY(collection.mural.name),
+        this.COLLECTION_MAIN_CACHE_KEY(collection.muralId),
       );
 
       return response;

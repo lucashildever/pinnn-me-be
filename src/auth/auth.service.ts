@@ -39,17 +39,26 @@ export class AuthService {
         {
           email: email,
           username: username,
-          password: await this.credentialsService.hashPassword(password),
+          password: password,
         },
         manager,
       );
 
       await this.subscriptionsService.subscribeToDefault(user.id, manager);
 
-      const defaultMural = await this.muralsService.create(user.id, {
-        name: username.toLowerCase().replace(/[^a-z0-9]/g, '-'),
-        displayName: `${username}'s Mural`,
-      });
+      const muralName = await this.muralsService.resolveAvailableMuralName(
+        username,
+        manager,
+      );
+
+      const defaultMural = await this.muralsService.create(
+        user.id,
+        {
+          name: muralName,
+          displayName: `${username}'s Mural`,
+        },
+        manager,
+      );
 
       const tokenPayload = { sub: user.id, email: user.email };
 
@@ -71,6 +80,11 @@ export class AuthService {
         isRevoked: false,
       });
 
+      const subscription = await this.subscriptionsService.getAuthSubscription(
+        user.id,
+        manager,
+      );
+
       return {
         access_token: accessToken,
         refresh_token: refreshToken,
@@ -80,6 +94,7 @@ export class AuthService {
           username: user.username,
           activeMuralId: defaultMural.id,
         },
+        subscription,
       };
     });
   }
@@ -118,6 +133,10 @@ export class AuthService {
       isRevoked: false,
     });
 
+    const subscription = await this.subscriptionsService.getAuthSubscription(
+      user.id,
+    );
+
     return {
       access_token: accessToken,
       refresh_token: refreshToken,
@@ -127,6 +146,7 @@ export class AuthService {
         username: user.username,
         activeMuralId: user.activeMuralId!,
       },
+      subscription,
     };
   }
 
@@ -207,6 +227,10 @@ export class AuthService {
       isRevoked: false,
     });
 
+    const subscription = await this.subscriptionsService.getAuthSubscription(
+      user.id,
+    );
+
     return {
       access_token: accessToken,
       refresh_token: newRefreshToken,
@@ -216,6 +240,7 @@ export class AuthService {
         username: user.username,
         activeMuralId: user.activeMuralId!,
       },
+      subscription,
     };
   }
 

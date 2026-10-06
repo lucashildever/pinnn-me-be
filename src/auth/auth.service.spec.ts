@@ -30,10 +30,12 @@ describe('AuthService', () => {
 
   const mockSubscriptionsService = {
     subscribeToDefault: jest.fn(),
+    getAuthSubscription: jest.fn(),
   };
 
   const mockMuralsService = {
     create: jest.fn(),
+    resolveAvailableMuralName: jest.fn(),
   };
 
   const mockRefreshTokenRepository = {
@@ -89,11 +91,21 @@ describe('AuthService', () => {
 
       const defaultMural = { id: 'mural-id' };
 
+      const subscriptionProfile = {
+        planType: 'free' as const,
+        limits: { pins_per_group: 4 },
+        features: ['Verified badge'],
+      };
+
       mockUsersService.validateEmailDoesNotExist.mockResolvedValue(undefined);
       mockCredentialsService.hashPassword.mockResolvedValue(hashedPassword);
       mockUsersService.create.mockResolvedValue(createdUser);
       mockSubscriptionsService.subscribeToDefault.mockResolvedValue(undefined);
+      mockMuralsService.resolveAvailableMuralName.mockResolvedValue('test');
       mockMuralsService.create.mockResolvedValue(defaultMural);
+      mockSubscriptionsService.getAuthSubscription.mockResolvedValue(
+        subscriptionProfile,
+      );
       mockJwtService.sign.mockReturnValue(accessToken);
 
       const result = await service.register(authCredentialsDto);
@@ -116,6 +128,15 @@ describe('AuthService', () => {
         createdUser.id,
         expect.anything(),
       );
+      expect(mockMuralsService.resolveAvailableMuralName).toHaveBeenCalledWith(
+        'test',
+        expect.anything(),
+      );
+      expect(mockMuralsService.create).toHaveBeenCalledWith(
+        createdUser.id,
+        { name: 'test', displayName: "test's Mural" },
+        expect.anything(),
+      );
       expect(mockJwtService.sign).toHaveBeenCalledWith({
         sub: createdUser.id,
         email: createdUser.email,
@@ -129,6 +150,7 @@ describe('AuthService', () => {
           username: createdUser.username,
           activeMuralId: defaultMural.id,
         },
+        subscription: subscriptionProfile,
       });
     });
   });

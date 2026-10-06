@@ -48,7 +48,7 @@ export class MuralsController {
       displayName: string;
       isActive: boolean;
     }[];
-    activeMuralId: string;
+    activeMuralId: string | null;
   }> {
     return this.muralsService.findAllByUser(request.user.id);
   }
