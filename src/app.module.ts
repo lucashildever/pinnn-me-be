@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+﻿import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule } from '@nestjs/throttler';
@@ -22,6 +22,7 @@ import { CredentialsModule } from './credentials/credentials.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { IntegrationsModule } from './integrations/integrations.module';
 import { ResourcesModule } from './resources/resources.module';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [
@@ -65,6 +66,9 @@ import { ResourcesModule } from './resources/resources.module';
     BillingsModule,
     IntegrationsModule,
     ResourcesModule,
+    StorageModule,
   ],
 })
 export class AppModule {}
+
+

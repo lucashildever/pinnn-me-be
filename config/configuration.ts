@@ -1,4 +1,4 @@
-export default () => {
+﻿export default () => {
   const requiredVars = {
     STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
     DB_HOST: process.env.DB_HOST,
@@ -49,6 +49,24 @@ export default () => {
     },
     urls: {
       frontend: process.env.FRONTEND_URL,
+    },
+    storage: {
+      endpoint: process.env.STORAGE_ENDPOINT,
+      port: parseInt(process.env.STORAGE_PORT ?? '9000', 10),
+      useSsl: process.env.STORAGE_USE_SSL === 'true',
+      accessKey: process.env.STORAGE_ACCESS_KEY,
+      secretKey: process.env.STORAGE_SECRET_KEY,
+      region: process.env.STORAGE_REGION ?? 'us-east-1',
+      buckets: {
+        images: process.env.STORAGE_BUCKET_IMAGES ?? 'images',
+        videos: process.env.STORAGE_BUCKET_VIDEOS ?? 'videos',
+        files: process.env.STORAGE_BUCKET_FILES ?? 'files',
+      },
+      cdn: {
+        images: process.env.STORAGE_CDN_URL_IMAGES,
+        videos: process.env.STORAGE_CDN_URL_VIDEOS,
+        files: process.env.STORAGE_CDN_URL_FILES,
+      },
     },
   };
 };
