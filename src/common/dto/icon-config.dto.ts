@@ -11,7 +11,7 @@ export class IconConfigDto {
   icon?: AppIcon;
 
   @ValidateIf((o) => o.type === 'custom')
-  @IsUrl()
+  @IsUrl({ require_tld: false })
   @IsNotEmpty()
   url?: string;
 

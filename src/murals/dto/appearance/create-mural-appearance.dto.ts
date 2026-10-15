@@ -18,11 +18,11 @@ class ThemeConfigDto implements MuralThemeConfig {
 
 export class CreateMuralAppearanceDto {
   @IsOptional()
-  @IsUrl()
+  @IsUrl({ require_tld: false })
   profileImageUrl?: string;
 
   @IsOptional()
-  @IsUrl()
+  @IsUrl({ require_tld: false })
   coverImageUrl?: string;
 
   @IsOptional()

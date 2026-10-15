@@ -46,15 +46,18 @@ export class VariantConfigDto {
   @Type(() => IconConfigDto)
   iconConfig?: IconConfigDto;
 
+  @IsOptional()
   @ValidateIf(
     (o) =>
-      o.type === 'image' ||
-      o.type === 'video' ||
-      o.type === 'link' ||
-      o.type === 'download',
+      (o.type === 'image' ||
+        o.type === 'video' ||
+        o.type === 'link' ||
+        o.type === 'download') &&
+      o.src !== undefined &&
+      o.src !== null &&
+      o.src !== '',
   )
-  @IsUrl()
-  @IsNotEmpty()
+  @IsUrl({ require_tld: false })
   src?: string;
 
   @ValidateIf((o) => o.type === 'integration')
